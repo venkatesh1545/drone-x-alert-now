@@ -14,13 +14,249 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      disasters: {
+        Row: {
+          affected_radius: number | null
+          created_at: string
+          description: string | null
+          id: string
+          latitude: number | null
+          location: string
+          longitude: number | null
+          severity: string | null
+          status: string | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          affected_radius?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          latitude?: number | null
+          location: string
+          longitude?: number | null
+          severity?: string | null
+          status?: string | null
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          affected_radius?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          latitude?: number | null
+          location?: string
+          longitude?: number | null
+          severity?: string | null
+          status?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      emergency_contacts: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          phone: string
+          priority: number | null
+          relationship: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          phone: string
+          priority?: number | null
+          relationship?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          phone?: string
+          priority?: number | null
+          relationship?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      emergency_requests: {
+        Row: {
+          created_at: string
+          description: string | null
+          emergency_type: string
+          id: string
+          latitude: number | null
+          longitude: number | null
+          priority: string | null
+          status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          emergency_type: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          priority?: string | null
+          status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          emergency_type?: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          priority?: string | null
+          status?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          address: string | null
+          age: number | null
+          blood_group: string | null
+          created_at: string
+          father_name: string | null
+          full_name: string
+          government_id: string | null
+          guardian_name: string | null
+          height: number | null
+          id: string
+          mother_name: string | null
+          occupation: string | null
+          phone: string | null
+          updated_at: string
+          user_id: string
+          weight: number | null
+        }
+        Insert: {
+          address?: string | null
+          age?: number | null
+          blood_group?: string | null
+          created_at?: string
+          father_name?: string | null
+          full_name: string
+          government_id?: string | null
+          guardian_name?: string | null
+          height?: number | null
+          id?: string
+          mother_name?: string | null
+          occupation?: string | null
+          phone?: string | null
+          updated_at?: string
+          user_id: string
+          weight?: number | null
+        }
+        Update: {
+          address?: string | null
+          age?: number | null
+          blood_group?: string | null
+          created_at?: string
+          father_name?: string | null
+          full_name?: string
+          government_id?: string | null
+          guardian_name?: string | null
+          height?: number | null
+          id?: string
+          mother_name?: string | null
+          occupation?: string | null
+          phone?: string | null
+          updated_at?: string
+          user_id?: string
+          weight?: number | null
+        }
+        Relationships: []
+      }
+      rescue_teams: {
+        Row: {
+          contact_email: string | null
+          contact_phone: string | null
+          created_at: string
+          current_latitude: number | null
+          current_longitude: number | null
+          id: string
+          specialization: string | null
+          status: string | null
+          team_name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          contact_email?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          current_latitude?: number | null
+          current_longitude?: number | null
+          id?: string
+          specialization?: string | null
+          status?: string | null
+          team_name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          contact_email?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          current_latitude?: number | null
+          current_longitude?: number | null
+          id?: string
+          specialization?: string | null
+          status?: string | null
+          team_name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: { user_id: string; role_name: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
