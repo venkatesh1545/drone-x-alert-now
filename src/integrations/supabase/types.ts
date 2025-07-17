@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_settings: {
+        Row: {
+          admin_id: string
+          created_at: string
+          id: string
+          setting_key: string
+          setting_value: Json | null
+          updated_at: string
+        }
+        Insert: {
+          admin_id: string
+          created_at?: string
+          id?: string
+          setting_key: string
+          setting_value?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          admin_id?: string
+          created_at?: string
+          id?: string
+          setting_key?: string
+          setting_value?: Json | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ai_chat_messages: {
         Row: {
           audio_url: string | null
@@ -316,6 +343,66 @@ export type Database = {
         }
         Relationships: []
       }
+      rescue_missions: {
+        Row: {
+          actual_arrival: string | null
+          assigned_by: string | null
+          completion_time: string | null
+          created_at: string
+          emergency_request_id: string
+          estimated_arrival: string | null
+          id: string
+          notes: string | null
+          priority: string | null
+          rescue_team_id: string
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          actual_arrival?: string | null
+          assigned_by?: string | null
+          completion_time?: string | null
+          created_at?: string
+          emergency_request_id: string
+          estimated_arrival?: string | null
+          id?: string
+          notes?: string | null
+          priority?: string | null
+          rescue_team_id: string
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          actual_arrival?: string | null
+          assigned_by?: string | null
+          completion_time?: string | null
+          created_at?: string
+          emergency_request_id?: string
+          estimated_arrival?: string | null
+          id?: string
+          notes?: string | null
+          priority?: string | null
+          rescue_team_id?: string
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rescue_missions_emergency_request_id_fkey"
+            columns: ["emergency_request_id"]
+            isOneToOne: false
+            referencedRelation: "emergency_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rescue_missions_rescue_team_id_fkey"
+            columns: ["rescue_team_id"]
+            isOneToOne: false
+            referencedRelation: "rescue_teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rescue_teams: {
         Row: {
           contact_email: string | null
@@ -393,6 +480,42 @@ export type Database = {
           },
         ]
       }
+      system_alerts: {
+        Row: {
+          admin_id: string
+          alert_type: string
+          created_at: string
+          id: string
+          is_resolved: boolean | null
+          message: string
+          resolved_at: string | null
+          severity: string | null
+          title: string
+        }
+        Insert: {
+          admin_id: string
+          alert_type: string
+          created_at?: string
+          id?: string
+          is_resolved?: boolean | null
+          message: string
+          resolved_at?: string | null
+          severity?: string | null
+          title: string
+        }
+        Update: {
+          admin_id?: string
+          alert_type?: string
+          created_at?: string
+          id?: string
+          is_resolved?: boolean | null
+          message?: string
+          resolved_at?: string | null
+          severity?: string | null
+          title?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -419,6 +542,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      auto_assign_rescue_team: {
+        Args: { emergency_id: string }
+        Returns: string
+      }
       has_role: {
         Args: { user_id: string; role_name: string }
         Returns: boolean
