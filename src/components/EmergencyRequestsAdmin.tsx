@@ -1,10 +1,9 @@
 
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, MapPin, Clock, Users, CheckCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { AlertTriangle, MapPin, Clock, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -13,47 +12,77 @@ interface EmergencyRequest {
   user_id: string;
   emergency_type: string;
   description?: string;
+  priority: string;
+  status: string;
   latitude?: number;
   longitude?: number;
-  status: string;
-  priority: string;
   created_at: string;
   updated_at: string;
-  profiles?: { full_name: string };
-  missions?: {
+  user_profile: { full_name: string } | null;
+  missions: Array<{
     id: string;
-    rescue_teams: { team_name: string };
-  }[];
+    rescue_team_id: string;
+    status: string;
+    rescue_teams: {
+      team_name: string;
+    };
+  }>;
 }
 
 export const EmergencyRequestsAdmin = () => {
-  const [emergencies, setEmergencies] = useState<EmergencyRequest[]>([]);
+  const [requests, setRequests] = useState<EmergencyRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedStatus, setSelectedStatus] = useState('all');
   const { toast } = useToast();
 
   useEffect(() => {
-    loadEmergencies();
+    loadRequests();
   }, []);
 
-  const loadEmergencies = async () => {
+  const loadRequests = async () => {
     try {
       const { data, error } = await supabase
         .from('emergency_requests')
         .select(`
-          *,
-          profiles!emergency_requests_user_id_fkey(full_name),
-          missions:rescue_missions(
-            id,
-            rescue_teams(team_name)
-          )
+          *
         `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setEmergencies(data || []);
+
+      // Fetch related data separately
+      const requestsWithDetails = await Promise.all(
+        (data || []).map(async (request) => {
+          // Get user profile
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('user_id', request.user_id)
+            .single();
+
+          // Get missions
+          const { data: missions } = await supabase
+            .from('rescue_missions')
+            .select(`
+              id,
+              rescue_team_id,
+              status,
+              rescue_teams:rescue_team_id (
+                team_name
+              )
+            `)
+            .eq('emergency_request_id', request.id);
+
+          return {
+            ...request,
+            user_profile: profile,
+            missions: missions || []
+          };
+        })
+      );
+
+      setRequests(requestsWithDetails);
     } catch (error) {
-      console.error('Error loading emergencies:', error);
+      console.error('Error loading requests:', error);
       toast({
         title: "Error",
         description: "Failed to load emergency requests",
@@ -64,38 +93,39 @@ export const EmergencyRequestsAdmin = () => {
     }
   };
 
-  const updateEmergencyStatus = async (emergencyId: string, status: string) => {
+  const updateRequestStatus = async (requestId: string, newStatus: string) => {
     try {
       const { error } = await supabase
         .from('emergency_requests')
         .update({ 
-          status, 
-          updated_at: new Date().toISOString() 
+          status: newStatus,
+          updated_at: new Date().toISOString()
         })
-        .eq('id', emergencyId);
+        .eq('id', requestId);
 
       if (error) throw error;
 
       toast({
         title: "Status Updated",
-        description: `Emergency status updated to ${status}`,
+        description: `Emergency request status changed to ${newStatus}`,
       });
-      
-      loadEmergencies();
+
+      loadRequests();
     } catch (error) {
       console.error('Error updating status:', error);
       toast({
         title: "Error",
-        description: "Failed to update emergency status",
+        description: "Failed to update request status",
         variant: "destructive",
       });
     }
   };
 
-  const assignRescueTeam = async (emergencyId: string) => {
+  const assignRescueTeam = async (requestId: string) => {
     try {
+      // Call the auto-assign function
       const { data, error } = await supabase.rpc('auto_assign_rescue_team', {
-        emergency_id: emergencyId
+        emergency_id: requestId
       });
 
       if (error) throw error;
@@ -105,32 +135,21 @@ export const EmergencyRequestsAdmin = () => {
           title: "Team Assigned",
           description: "Rescue team has been automatically assigned",
         });
-        loadEmergencies();
+        loadRequests();
       } else {
         toast({
-          title: "No Available Teams",
-          description: "No rescue teams are currently available",
+          title: "No Teams Available",
+          description: "No available rescue teams found nearby",
           variant: "destructive",
         });
       }
     } catch (error) {
-      console.error('Error assigning rescue team:', error);
+      console.error('Error assigning team:', error);
       toast({
         title: "Error",
         description: "Failed to assign rescue team",
         variant: "destructive",
       });
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-700';
-      case 'assigned': return 'bg-blue-100 text-blue-700';
-      case 'in_progress': return 'bg-orange-100 text-orange-700';
-      case 'resolved': return 'bg-green-100 text-green-700';
-      case 'cancelled': return 'bg-gray-100 text-gray-700';
-      default: return 'bg-gray-100 text-gray-700';
     }
   };
 
@@ -144,9 +163,15 @@ export const EmergencyRequestsAdmin = () => {
     }
   };
 
-  const filteredEmergencies = emergencies.filter(emergency => 
-    selectedStatus === 'all' || emergency.status === selectedStatus
-  );
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'bg-red-100 text-red-700';
+      case 'assigned': return 'bg-yellow-100 text-yellow-700';
+      case 'in_progress': return 'bg-blue-100 text-blue-700';
+      case 'completed': return 'bg-green-100 text-green-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
 
   if (loading) {
     return <div className="text-center py-8">Loading emergency requests...</div>;
@@ -154,113 +179,129 @@ export const EmergencyRequestsAdmin = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Emergency Requests</h2>
-        <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="assigned">Assigned</SelectItem>
-            <SelectItem value="in_progress">In Progress</SelectItem>
-            <SelectItem value="resolved">Resolved</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-red-500" />
+            Emergency Requests
+          </CardTitle>
+          <CardDescription>
+            Manage and respond to emergency requests from users
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {requests.map((request) => (
+              <div key={request.id} className="border rounded-lg p-4">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-lg">{request.emergency_type}</h3>
+                      <Badge className={getPriorityColor(request.priority)}>
+                        {request.priority}
+                      </Badge>
+                      <Badge className={getStatusColor(request.status)}>
+                        {request.status}
+                      </Badge>
+                    </div>
+                    
+                    <div className="flex items-center gap-4 text-sm text-gray-600">
+                      <div className="flex items-center gap-1">
+                        <User className="h-4 w-4" />
+                        {request.user_profile?.full_name || 'Unknown User'}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        {new Date(request.created_at).toLocaleString()}
+                      </div>
+                      {request.latitude && request.longitude && (
+                        <div className="flex items-center gap-1">
+                          <MapPin className="h-4 w-4" />
+                          {request.latitude.toFixed(4)}, {request.longitude.toFixed(4)}
+                        </div>
+                      )}
+                    </div>
 
-      <div className="grid gap-4">
-        {filteredEmergencies.map((emergency) => (
-          <Card key={emergency.id} className="border-sky-100">
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5 text-red-500" />
-                    {emergency.emergency_type}
-                  </CardTitle>
-                  <CardDescription>
-                    Reported by {emergency.profiles?.full_name || 'Unknown'} • 
-                    {new Date(emergency.created_at).toLocaleString()}
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge className={getPriorityColor(emergency.priority)}>
-                    {emergency.priority}
-                  </Badge>
-                  <Badge className={getStatusColor(emergency.status)}>
-                    {emergency.status}
-                  </Badge>
+                    {request.description && (
+                      <p className="text-gray-700">{request.description}</p>
+                    )}
+
+                    {request.missions.length > 0 && (
+                      <div className="mt-3">
+                        <h4 className="font-medium mb-2">Assigned Teams:</h4>
+                        <div className="space-y-1">
+                          {request.missions.map((mission) => (
+                            <div key={mission.id} className="flex items-center gap-2 text-sm">
+                              <Badge variant="outline">
+                                {mission.rescue_teams?.team_name || 'Unknown Team'}
+                              </Badge>
+                              <span className="text-gray-600">- {mission.status}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    {request.status === 'pending' && (
+                      <Button
+                        onClick={() => assignRescueTeam(request.id)}
+                        size="sm"
+                        className="w-full"
+                      >
+                        Assign Team
+                      </Button>
+                    )}
+                    
+                    <div className="flex flex-col gap-1">
+                      {request.status !== 'assigned' && request.status !== 'pending' && (
+                        <Button
+                          onClick={() => updateRequestStatus(request.id, 'assigned')}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Mark Assigned
+                        </Button>
+                      )}
+                      
+                      {request.status !== 'in_progress' && (
+                        <Button
+                          onClick={() => updateRequestStatus(request.id, 'in_progress')}
+                          variant="outline"
+                          size="sm"
+                        >
+                          In Progress
+                        </Button>
+                      )}
+                      
+                      {request.status !== 'completed' && (
+                        <Button
+                          onClick={() => updateRequestStatus(request.id, 'completed')}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Complete
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {emergency.description && (
-                <p className="text-gray-700">{emergency.description}</p>
-              )}
-              
-              {emergency.latitude && emergency.longitude && (
-                <div className="flex items-center text-sm text-gray-600">
-                  <MapPin className="h-4 w-4 mr-2" />
-                  Location: {emergency.latitude.toFixed(6)}, {emergency.longitude.toFixed(6)}
-                </div>
-              )}
+            ))}
+          </div>
 
-              {emergency.missions && emergency.missions.length > 0 && (
-                <div className="flex items-center text-sm text-gray-600">
-                  <Users className="h-4 w-4 mr-2" />
-                  Assigned to: {emergency.missions[0].rescue_teams.team_name}
-                </div>
-              )}
-
-              <div className="flex space-x-2">
-                {emergency.status === 'pending' && (
-                  <>
-                    <Button size="sm" onClick={() => assignRescueTeam(emergency.id)}>
-                      <Users className="h-4 w-4 mr-2" />
-                      Assign Team
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => updateEmergencyStatus(emergency.id, 'assigned')}>
-                      Mark Assigned
-                    </Button>
-                  </>
-                )}
-                
-                {emergency.status === 'assigned' && (
-                  <Button size="sm" onClick={() => updateEmergencyStatus(emergency.id, 'in_progress')}>
-                    <Clock className="h-4 w-4 mr-2" />
-                    Start Progress
-                  </Button>
-                )}
-                
-                {emergency.status === 'in_progress' && (
-                  <Button size="sm" onClick={() => updateEmergencyStatus(emergency.id, 'resolved')}>
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Mark Resolved
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {filteredEmergencies.length === 0 && (
-        <Card className="border-sky-100">
-          <CardContent className="p-12 text-center">
-            <AlertTriangle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No emergency requests</h3>
-            <p className="text-gray-500">
-              {selectedStatus !== 'all' 
-                ? `No ${selectedStatus} emergency requests found.`
-                : 'No emergency requests have been submitted yet.'
-              }
-            </p>
-          </CardContent>
-        </Card>
-      )}
+          {requests.length === 0 && (
+            <div className="text-center py-8">
+              <AlertTriangle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No emergency requests</h3>
+              <p className="text-gray-500">
+                There are currently no emergency requests in the system.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };

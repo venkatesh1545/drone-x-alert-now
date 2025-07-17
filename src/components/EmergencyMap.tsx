@@ -13,7 +13,7 @@ interface EmergencyLocation {
   status: string;
   priority: string;
   created_at: string;
-  profiles: { full_name: string };
+  user_profile: { full_name: string } | null;
 }
 
 interface EmergencyMapProps {
@@ -43,13 +43,30 @@ export const EmergencyMap = ({ teamLocation }: EmergencyMapProps) => {
           status,
           priority,
           created_at,
-          profiles(full_name)
+          user_id
         `)
         .in('status', ['pending', 'assigned', 'in_progress'])
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setEmergencies(data || []);
+
+      // Fetch user profiles separately
+      const emergenciesWithProfiles = await Promise.all(
+        (data || []).map(async (emergency) => {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('user_id', emergency.user_id)
+            .single();
+
+          return {
+            ...emergency,
+            user_profile: profile
+          };
+        })
+      );
+
+      setEmergencies(emergenciesWithProfiles);
     } catch (error) {
       console.error('Error loading emergencies:', error);
     } finally {
@@ -119,7 +136,7 @@ export const EmergencyMap = ({ teamLocation }: EmergencyMapProps) => {
                       {emergency.emergency_type}
                     </h3>
                     <p className="text-sm text-gray-600">
-                      Reported by {emergency.profiles.full_name}
+                      Reported by {emergency.user_profile?.full_name || 'Unknown User'}
                     </p>
                     <p className="text-xs text-gray-500">
                       {new Date(emergency.created_at).toLocaleString()}
