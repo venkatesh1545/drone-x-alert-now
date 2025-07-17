@@ -5,30 +5,26 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Bot, Send, MapPin, Phone, AlertTriangle, Heart, 
-  Shield, Home, Utensils, User, MessageCircle, CheckCircle, Clock
+  Shield, Home, Utensils, MessageCircle, CheckCircle, Clock,
+  Mic, Volume2, Headphones
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-
-interface Message {
-  id: string;
-  type: 'user' | 'bot';
-  content: string;
-  timestamp: Date;
-  location?: { lat: number; lng: number; };
-}
+import { VoiceAssistant } from "@/components/VoiceAssistant";
+import { useRealtimeChat } from "@/hooks/useRealtimeChat";
 
 const AIAssistant = () => {
-  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number; } | null>(null);
-  const [emergencyType, setEmergencyType] = useState<string | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  
+  const { messages, currentSession, loading, sendMessage } = useRealtimeChat();
 
   useEffect(() => {
     // Get user location
@@ -50,15 +46,6 @@ const AIAssistant = () => {
         }
       );
     }
-
-    // Initial bot message
-    const initialMessage: Message = {
-      id: "1",
-      type: 'bot',
-      content: "Hello! I'm DroneX AI Assistant. I'm here to help you with any emergency situations. I can track your location and coordinate with rescue teams. How can I assist you today?",
-      timestamp: new Date()
-    };
-    setMessages([initialMessage]);
   }, [toast]);
 
   useEffect(() => {
@@ -89,73 +76,37 @@ const AIAssistant = () => {
     }
   ];
 
-  const handleEmergencyCategory = (type: string) => {
-    setEmergencyType(type);
+  const handleEmergencyCategory = async (type: string) => {
     const category = emergencyCategories.find(cat => cat.type === type);
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: `Emergency: ${category?.label}`,
-      timestamp: new Date(),
-      location: userLocation || undefined
-    };
-
-    const botResponse: Message = {
-      id: (Date.now() + 1).toString(),
-      type: 'bot',
-      content: `I understand you're experiencing a ${category?.label.toLowerCase()}. I'm gathering your location data and will connect you with the appropriate emergency services. Please provide more details about your situation.`,
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, userMessage, botResponse]);
+    const content = `Emergency: ${category?.label}`;
+    
+    await sendMessage(content, undefined, userLocation);
     setShowConfirmation(true);
   };
 
   const handleSendMessage = async () => {
     if (!input.trim()) return;
-
-    setLoading(true);
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: input,
-      timestamp: new Date(),
-      location: userLocation || undefined
-    };
-
-    setMessages(prev => [...prev, userMessage]);
+    
+    await sendMessage(input, undefined, userLocation);
     setInput("");
+    
+    // Check for emergency keywords
+    const lowerInput = input.toLowerCase();
+    if (lowerInput.includes("help") || lowerInput.includes("emergency") || 
+        lowerInput.includes("rescue") || lowerInput.includes("trapped")) {
+      setShowConfirmation(true);
+    }
+  };
 
-    // Simulate AI response with emergency detection
-    setTimeout(() => {
-      let botResponse = "";
-      const lowerInput = input.toLowerCase();
-
-      if (lowerInput.includes("help") || lowerInput.includes("emergency") || lowerInput.includes("rescue")) {
-        botResponse = "I detect this is an emergency situation. I'm immediately alerting rescue teams and your emergency contacts with your current location. Stay calm and follow these steps:\n\n1. Stay in a safe location if possible\n2. Keep your phone charged and accessible\n3. Listen for rescue team communications\n\nEmergency services have been notified and are en route to your location.";
-        setShowConfirmation(true);
-      } else if (lowerInput.includes("stuck") || lowerInput.includes("trapped")) {
-        botResponse = "I understand you're trapped. This is a high-priority emergency. I'm sending your exact coordinates to rescue teams immediately. Please:\n\n• Stay calm and conserve energy\n• Make noise periodically to help rescuers locate you\n• Stay hydrated if you have water\n• Do not attempt to move heavy debris\n\nRescue teams are being dispatched to your location.";
-        setEmergencyType("disaster");
-        setShowConfirmation(true);
-      } else if (lowerInput.includes("medical") || lowerInput.includes("injured") || lowerInput.includes("hurt")) {
-        botResponse = "Medical emergency detected. I'm contacting emergency medical services with your location. While you wait:\n\n• Apply pressure to any bleeding wounds\n• Stay conscious and alert\n• Do not move if you suspect spinal injury\n• Take slow, deep breaths to stay calm\n\nMedical assistance is on the way.";
-        setEmergencyType("medical");
-        setShowConfirmation(true);
-      } else {
-        botResponse = "I'm here to help with any emergency situations. If you're experiencing an emergency, please let me know immediately. I can:\n\n• Alert rescue teams with your location\n• Contact your emergency contacts\n• Provide safety guidelines\n• Coordinate with local authorities\n\nIs there a specific emergency situation you need help with?";
-      }
-
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'bot',
-        content: botResponse,
-        timestamp: new Date()
-      };
-
-      setMessages(prev => [...prev, botMessage]);
-      setLoading(false);
-    }, 1500);
+  const handleVoiceTranscript = async (transcript: string) => {
+    await sendMessage(transcript, undefined, userLocation);
+    
+    // Check for emergency keywords
+    const lowerTranscript = transcript.toLowerCase();
+    if (lowerTranscript.includes("help") || lowerTranscript.includes("emergency") || 
+        lowerTranscript.includes("rescue") || lowerTranscript.includes("trapped")) {
+      setShowConfirmation(true);
+    }
   };
 
   const handleConfirmEmergency = () => {
@@ -163,15 +114,6 @@ const AIAssistant = () => {
       title: "Emergency Alert Sent",
       description: "Your emergency contacts and rescue teams have been notified with your location.",
     });
-
-    const confirmationMessage: Message = {
-      id: Date.now().toString(),
-      type: 'bot',
-      content: `✅ Emergency alert successfully sent!\n\nNotified:\n• Your 5 emergency contacts\n• Local rescue teams\n• Emergency services\n\nLocation shared: ${userLocation ? `${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}` : 'Location unavailable'}\n\nHelp is on the way. Stay safe and keep your phone accessible.`,
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, confirmationMessage]);
     setShowConfirmation(false);
   };
 
@@ -218,7 +160,7 @@ const AIAssistant = () => {
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">DroneX AI Assistant</h1>
           <p className="text-gray-600">
-            24/7 Emergency Response AI • Real-time Location Tracking • Instant Rescue Coordination
+            24/7 Emergency Response AI • Real-time Location Tracking • Voice & Text Interface
           </p>
           {userLocation && (
             <div className="flex items-center justify-center mt-2 text-sm text-green-600">
@@ -228,34 +170,48 @@ const AIAssistant = () => {
           )}
         </div>
 
+        {/* Interface Mode Toggle */}
+        <div className="flex justify-center mb-6">
+          <Tabs value={isVoiceMode ? "voice" : "text"} onValueChange={(value) => setIsVoiceMode(value === "voice")}>
+            <TabsList className="grid w-full grid-cols-2 max-w-md">
+              <TabsTrigger value="text" className="flex items-center">
+                <MessageCircle className="h-4 w-4 mr-2" />
+                Text Chat
+              </TabsTrigger>
+              <TabsTrigger value="voice" className="flex items-center">
+                <Headphones className="h-4 w-4 mr-2" />
+                Voice Assistant
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
         {/* Emergency Categories */}
-        {!emergencyType && (
-          <Card className="border-sky-100 mb-6">
-            <CardHeader>
-              <CardTitle className="text-center">Quick Emergency Response</CardTitle>
-              <CardDescription className="text-center">
-                Select your emergency type for immediate assistance
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-3 gap-4">
-                {emergencyCategories.map((category) => (
-                  <Button
-                    key={category.type}
-                    onClick={() => handleEmergencyCategory(category.type)}
-                    className={`${category.color} text-white h-auto p-6 flex flex-col items-center space-y-3 hover:scale-105 transition-all`}
-                  >
-                    <category.icon className="h-8 w-8" />
-                    <div className="text-center">
-                      <div className="font-semibold">{category.label}</div>
-                      <div className="text-xs opacity-90 mt-1">{category.description}</div>
-                    </div>
-                  </Button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <Card className="border-sky-100 mb-6">
+          <CardHeader>
+            <CardTitle className="text-center">Quick Emergency Response</CardTitle>
+            <CardDescription className="text-center">
+              Select your emergency type for immediate assistance
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-3 gap-4">
+              {emergencyCategories.map((category) => (
+                <Button
+                  key={category.type}
+                  onClick={() => handleEmergencyCategory(category.type)}
+                  className={`${category.color} text-white h-auto p-6 flex flex-col items-center space-y-3 hover:scale-105 transition-all`}
+                >
+                  <category.icon className="h-8 w-8" />
+                  <div className="text-center">
+                    <div className="font-semibold">{category.label}</div>
+                    <div className="text-xs opacity-90 mt-1">{category.description}</div>
+                  </div>
+                </Button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Confirmation Dialog */}
         {showConfirmation && (
@@ -284,106 +240,117 @@ const AIAssistant = () => {
           </Alert>
         )}
 
-        {/* Chat Interface */}
-        <Card className="border-sky-100 shadow-xl">
-          <CardHeader className="border-b border-sky-100">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-sky-500 to-sky-600 rounded-full flex items-center justify-center">
-                  <Bot className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">AI Emergency Assistant</CardTitle>
-                  <div className="flex items-center space-x-2 text-sm text-green-600">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span>Online & Ready</span>
-                  </div>
-                </div>
-              </div>
-              <Badge className="bg-sky-100 text-sky-700">
-                <Clock className="h-3 w-3 mr-1" />
-                24/7 Available
-              </Badge>
-            </div>
-          </CardHeader>
-          
-          <CardContent className="p-0">
-            {/* Messages */}
-            <div className="h-96 overflow-y-auto p-6 space-y-4">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[80%] p-4 rounded-lg ${
-                      message.type === 'user'
-                        ? 'bg-sky-500 text-white'
-                        : 'bg-gray-100 text-gray-900'
-                    }`}
-                  >
-                    {message.type === 'bot' && (
-                      <div className="flex items-center space-x-2 mb-2">
-                        <Bot className="h-4 w-4 text-sky-500" />
-                        <span className="text-xs font-medium text-sky-600">DroneX AI</span>
-                      </div>
-                    )}
-                    <p className="whitespace-pre-wrap">{message.content}</p>
-                    {message.location && (
-                      <div className="flex items-center space-x-1 mt-2 text-xs opacity-75">
-                        <MapPin className="h-3 w-3" />
-                        <span>Location shared</span>
-                      </div>
-                    )}
-                    <div className={`text-xs mt-2 opacity-75 ${message.type === 'user' ? 'text-sky-100' : 'text-gray-500'}`}>
-                      {message.timestamp.toLocaleTimeString()}
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {loading && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-100 text-gray-900 p-4 rounded-lg">
-                    <div className="flex items-center space-x-2">
-                      <Bot className="h-4 w-4 text-sky-500" />
-                      <span className="text-xs font-medium text-sky-600">DroneX AI</span>
-                    </div>
-                    <div className="flex space-x-2 mt-2">
-                      <div className="w-2 h-2 bg-sky-500 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-sky-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-2 h-2 bg-sky-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
+        {/* Main Interface */}
+        <Tabs value={isVoiceMode ? "voice" : "text"}>
+          <TabsContent value="voice">
+            <VoiceAssistant 
+              onTranscript={handleVoiceTranscript}
+              isProcessing={loading}
+            />
+          </TabsContent>
 
-            {/* Input */}
-            <div className="border-t border-sky-100 p-4">
-              <div className="flex space-x-3">
-                <Input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Describe your emergency or ask for help..."
-                  className="flex-1 border-sky-200 focus:border-sky-400"
-                  disabled={loading}
-                />
-                <Button
-                  onClick={handleSendMessage}
-                  disabled={loading || !input.trim()}
-                  className="bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                💡 Try: "I'm trapped in a building", "Medical emergency", or "Need rescue"
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+          <TabsContent value="text">
+            <Card className="border-sky-100 shadow-xl">
+              <CardHeader className="border-b border-sky-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-gradient-to-r from-sky-500 to-sky-600 rounded-full flex items-center justify-center">
+                      <Bot className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">AI Emergency Assistant</CardTitle>
+                      <div className="flex items-center space-x-2 text-sm text-green-600">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <span>Online & Ready</span>
+                      </div>
+                    </div>
+                  </div>
+                  <Badge className="bg-sky-100 text-sky-700">
+                    <Clock className="h-3 w-3 mr-1" />
+                    24/7 Available
+                  </Badge>
+                </div>
+              </CardHeader>
+              
+              <CardContent className="p-0">
+                {/* Messages */}
+                <div className="h-96 overflow-y-auto p-6 space-y-4">
+                  {messages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={`flex ${message.message_type === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-[80%] p-4 rounded-lg ${
+                          message.message_type === 'user'
+                            ? 'bg-sky-500 text-white'
+                            : 'bg-gray-100 text-gray-900'
+                        }`}
+                      >
+                        {message.message_type === 'assistant' && (
+                          <div className="flex items-center space-x-2 mb-2">
+                            <Bot className="h-4 w-4 text-sky-500" />
+                            <span className="text-xs font-medium text-sky-600">DroneX AI</span>
+                          </div>
+                        )}
+                        <p className="whitespace-pre-wrap">{message.content}</p>
+                        {message.location_data && (
+                          <div className="flex items-center space-x-1 mt-2 text-xs opacity-75">
+                            <MapPin className="h-3 w-3" />
+                            <span>Location shared</span>
+                          </div>
+                        )}
+                        <div className={`text-xs mt-2 opacity-75 ${message.message_type === 'user' ? 'text-sky-100' : 'text-gray-500'}`}>
+                          {new Date(message.created_at).toLocaleTimeString()}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {loading && (
+                    <div className="flex justify-start">
+                      <div className="bg-gray-100 text-gray-900 p-4 rounded-lg">
+                        <div className="flex items-center space-x-2">
+                          <Bot className="h-4 w-4 text-sky-500" />
+                          <span className="text-xs font-medium text-sky-600">DroneX AI</span>
+                        </div>
+                        <div className="flex space-x-2 mt-2">
+                          <div className="w-2 h-2 bg-sky-500 rounded-full animate-bounce"></div>
+                          <div className="w-2 h-2 bg-sky-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                          <div className="w-2 h-2 bg-sky-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Input */}
+                <div className="border-t border-sky-100 p-4">
+                  <div className="flex space-x-3">
+                    <Input
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      placeholder="Describe your emergency or ask for help..."
+                      className="flex-1 border-sky-200 focus:border-sky-400"
+                      disabled={loading}
+                    />
+                    <Button
+                      onClick={handleSendMessage}
+                      disabled={loading || !input.trim()}
+                      className="bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700"
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    💡 Try: "I'm trapped in a building", "Medical emergency", or "Need rescue"
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         {/* Quick Actions */}
         <div className="grid md:grid-cols-3 gap-4 mt-6">

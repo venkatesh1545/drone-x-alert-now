@@ -14,6 +14,89 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_chat_messages: {
+        Row: {
+          audio_url: string | null
+          content: string
+          created_at: string
+          emergency_detected: boolean | null
+          id: string
+          location_data: Json | null
+          message_type: string
+          session_id: string
+          user_id: string
+        }
+        Insert: {
+          audio_url?: string | null
+          content: string
+          created_at?: string
+          emergency_detected?: boolean | null
+          id?: string
+          location_data?: Json | null
+          message_type: string
+          session_id: string
+          user_id: string
+        }
+        Update: {
+          audio_url?: string | null
+          content?: string
+          created_at?: string
+          emergency_detected?: boolean | null
+          id?: string
+          location_data?: Json | null
+          message_type?: string
+          session_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_chat_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "ai_chat_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_chat_sessions: {
+        Row: {
+          created_at: string
+          emergency_detected: boolean | null
+          id: string
+          is_active: boolean | null
+          latitude: number | null
+          location_shared: boolean | null
+          longitude: number | null
+          session_name: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          emergency_detected?: boolean | null
+          id?: string
+          is_active?: boolean | null
+          latitude?: number | null
+          location_shared?: boolean | null
+          longitude?: number | null
+          session_name?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          emergency_detected?: boolean | null
+          id?: string
+          is_active?: boolean | null
+          latitude?: number | null
+          location_shared?: boolean | null
+          longitude?: number | null
+          session_name?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       disasters: {
         Row: {
           affected_radius: number | null
@@ -53,6 +136,54 @@ export type Database = {
           status?: string | null
           type?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      drone_streams: {
+        Row: {
+          admin_id: string
+          created_at: string
+          description: string | null
+          emergency_level: string | null
+          id: string
+          is_active: boolean | null
+          latitude: number | null
+          location: string
+          longitude: number | null
+          stream_name: string
+          stream_quality: string | null
+          updated_at: string
+          viewer_count: number | null
+        }
+        Insert: {
+          admin_id: string
+          created_at?: string
+          description?: string | null
+          emergency_level?: string | null
+          id?: string
+          is_active?: boolean | null
+          latitude?: number | null
+          location: string
+          longitude?: number | null
+          stream_name: string
+          stream_quality?: string | null
+          updated_at?: string
+          viewer_count?: number | null
+        }
+        Update: {
+          admin_id?: string
+          created_at?: string
+          description?: string | null
+          emergency_level?: string | null
+          id?: string
+          is_active?: boolean | null
+          latitude?: number | null
+          location?: string
+          longitude?: number | null
+          stream_name?: string
+          stream_quality?: string | null
+          updated_at?: string
+          viewer_count?: number | null
         }
         Relationships: []
       }
@@ -226,6 +357,41 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      stream_viewers: {
+        Row: {
+          id: string
+          joined_at: string
+          last_seen: string
+          stream_id: string
+          user_id: string | null
+          viewer_ip: string | null
+        }
+        Insert: {
+          id?: string
+          joined_at?: string
+          last_seen?: string
+          stream_id: string
+          user_id?: string | null
+          viewer_ip?: string | null
+        }
+        Update: {
+          id?: string
+          joined_at?: string
+          last_seen?: string
+          stream_id?: string
+          user_id?: string | null
+          viewer_ip?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stream_viewers_stream_id_fkey"
+            columns: ["stream_id"]
+            isOneToOne: false
+            referencedRelation: "drone_streams"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
