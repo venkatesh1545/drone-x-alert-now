@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Shield, Mail, Lock, User, AlertCircle } from "lucide-react";
+import { Shield, Mail, Lock, UserIcon, AlertCircle } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -278,7 +278,7 @@ const Auth = () => {
                   <div className="space-y-2">
                     <Label htmlFor="signup-name">Full Name</Label>
                     <div className="relative">
-                      <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <UserIcon className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                       <Input
                         id="signup-name"
                         type="text"
