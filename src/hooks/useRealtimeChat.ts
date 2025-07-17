@@ -84,7 +84,14 @@ export const useRealtimeChat = () => {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setMessages(data || []);
+      
+      // Type cast the database response to match our interface
+      const typedMessages = (data || []).map(message => ({
+        ...message,
+        message_type: message.message_type as 'user' | 'assistant' | 'system'
+      })) as ChatMessage[];
+      
+      setMessages(typedMessages);
     } catch (error) {
       console.error('Error loading messages:', error);
     }
@@ -102,7 +109,12 @@ export const useRealtimeChat = () => {
           filter: `session_id=eq.${sessionId}`,
         },
         (payload) => {
-          setMessages(prev => [...prev, payload.new as ChatMessage]);
+          const typedMessage = {
+            ...payload.new,
+            message_type: payload.new.message_type as 'user' | 'assistant' | 'system'
+          } as ChatMessage;
+          
+          setMessages(prev => [...prev, typedMessage]);
         }
       )
       .subscribe();

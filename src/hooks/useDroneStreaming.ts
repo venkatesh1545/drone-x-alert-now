@@ -65,11 +65,19 @@ export const useDroneStreaming = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setActiveStreams(data || []);
       
-      if (data && data.length > 0) {
-        setCurrentStream(data[0]);
-        await joinStream(data[0].id);
+      // Type cast the database response to match our interface
+      const typedStreams = (data || []).map(stream => ({
+        ...stream,
+        stream_quality: stream.stream_quality as 'SD' | 'HD' | '4K',
+        emergency_level: stream.emergency_level as 'low' | 'medium' | 'high' | 'critical'
+      })) as DroneStream[];
+      
+      setActiveStreams(typedStreams);
+      
+      if (typedStreams && typedStreams.length > 0) {
+        setCurrentStream(typedStreams[0]);
+        await joinStream(typedStreams[0].id);
       }
     } catch (error) {
       console.error('Error loading streams:', error);
@@ -90,7 +98,12 @@ export const useDroneStreaming = () => {
         },
         (payload) => {
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const stream = payload.new as DroneStream;
+            const stream = {
+              ...payload.new,
+              stream_quality: payload.new.stream_quality as 'SD' | 'HD' | '4K',
+              emergency_level: payload.new.emergency_level as 'low' | 'medium' | 'high' | 'critical'
+            } as DroneStream;
+            
             if (stream.is_active) {
               setActiveStreams(prev => {
                 const filtered = prev.filter(s => s.id !== stream.id);
@@ -132,7 +145,14 @@ export const useDroneStreaming = () => {
         description: `Live stream "${streamData.stream_name}" is now active`,
       });
 
-      return data;
+      // Type cast the response
+      const typedStream = {
+        ...data,
+        stream_quality: data.stream_quality as 'SD' | 'HD' | '4K',
+        emergency_level: data.emergency_level as 'low' | 'medium' | 'high' | 'critical'
+      } as DroneStream;
+
+      return typedStream;
     } catch (error) {
       console.error('Error starting stream:', error);
       toast({
