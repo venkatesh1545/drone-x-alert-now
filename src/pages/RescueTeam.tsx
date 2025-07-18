@@ -30,7 +30,7 @@ const RescueTeam = () => {
       (event, session) => {
         setUser(session?.user ?? null);
         if (!session?.user) {
-          navigate("/auth");
+          navigate("/rescue-team-auth");
         } else {
           checkRescueTeamRole(session.user.id);
         }
@@ -41,7 +41,7 @@ const RescueTeam = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (!session?.user) {
-        navigate("/auth");
+        navigate("/rescue-team-auth");
       } else {
         checkRescueTeamRole(session.user.id);
       }

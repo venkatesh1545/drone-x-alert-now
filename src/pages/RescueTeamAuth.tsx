@@ -43,7 +43,7 @@ const RescueTeamAuth = () => {
             const hasRescueTeamRole = roles?.some(r => r.role === 'rescue_team');
             
             if (hasRescueTeamRole) {
-              navigate("/rescue-team");
+        navigate("/rescue-team");
             } else {
               toast({
                 title: "Access Denied",

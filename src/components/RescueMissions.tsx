@@ -30,7 +30,11 @@ interface RescueMission {
   };
 }
 
-export const RescueMissions = () => {
+interface RescueMissionsProps {
+  teamId?: string;
+}
+
+export const RescueMissions = ({ teamId }: RescueMissionsProps) => {
   const [missions, setMissions] = useState<RescueMission[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingMission, setUpdatingMission] = useState<string | null>(null);
@@ -47,20 +51,25 @@ export const RescueMissions = () => {
       if (!user) return;
 
       // Get current user's rescue team
-      const { data: rescueTeam } = await supabase
-        .from('rescue_teams')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!rescueTeam) return;
+      let currentTeamId = teamId;
+      
+      if (!currentTeamId) {
+        const { data: rescueTeam } = await supabase
+          .from('rescue_teams')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (!rescueTeam) return;
+        currentTeamId = rescueTeam.id;
+      }
 
       const { data, error } = await supabase
         .from('rescue_missions')
         .select(`
           *
         `)
-        .eq('rescue_team_id', rescueTeam.id)
+        .eq('rescue_team_id', currentTeamId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;

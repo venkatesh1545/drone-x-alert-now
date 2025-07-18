@@ -41,7 +41,7 @@ const AdminAuth = () => {
             const hasAdminRole = roles?.some(r => r.role === 'admin');
             
             if (hasAdminRole) {
-              navigate("/admin");
+        navigate("/admin");
             } else {
               toast({
                 title: "Access Denied",

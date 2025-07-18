@@ -30,7 +30,7 @@ const Admin = () => {
       (event, session) => {
         setUser(session?.user ?? null);
         if (!session?.user) {
-          navigate("/auth");
+          navigate("/admin-auth");
         } else {
           checkAdminRole(session.user.id);
         }
@@ -41,7 +41,7 @@ const Admin = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (!session?.user) {
-        navigate("/auth");
+        navigate("/admin-auth");
       } else {
         checkAdminRole(session.user.id);
       }
