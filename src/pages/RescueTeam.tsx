@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { RescueMissions } from "@/components/RescueMissions";
-import { TeamLocationTracker } from "@/components/TeamLocationTracker";
+import TeamLocationTracker from "@/components/TeamLocationTracker";
 import { EmergencyMap } from "@/components/EmergencyMap";
 
 const RescueTeam = () => {
