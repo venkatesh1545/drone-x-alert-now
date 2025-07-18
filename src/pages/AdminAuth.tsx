@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,23 +25,75 @@ const AdminAuth = () => {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
+        console.log('Admin auth state change:', event, session?.user?.id);
         setUser(session?.user ?? null);
+        
         if (session?.user) {
-          navigate("/admin");
+          // Check if user has admin role before redirecting
+          try {
+            const { data: roles } = await supabase
+              .from('user_roles')
+              .select('role')
+              .eq('user_id', session.user.id);
+
+            console.log('User roles:', roles);
+            const hasAdminRole = roles?.some(r => r.role === 'admin');
+            
+            if (hasAdminRole) {
+              navigate("/admin");
+            } else {
+              toast({
+                title: "Access Denied",
+                description: "You don't have admin privileges.",
+                variant: "destructive",
+              });
+              await supabase.auth.signOut();
+            }
+          } catch (error) {
+            console.error('Error checking admin role:', error);
+            toast({
+              title: "Error",
+              description: "Failed to verify admin privileges.",
+              variant: "destructive",
+            });
+          }
         }
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      console.log('Initial session check:', session?.user?.id);
       setUser(session?.user ?? null);
+      
       if (session?.user) {
-        navigate("/admin");
+        // Check if user has admin role
+        try {
+          const { data: roles } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', session.user.id);
+
+          const hasAdminRole = roles?.some(r => r.role === 'admin');
+          
+          if (hasAdminRole) {
+            navigate("/admin");
+          } else {
+            toast({
+              title: "Access Denied",
+              description: "You don't have admin privileges.",
+              variant: "destructive",
+            });
+            await supabase.auth.signOut();
+          }
+        } catch (error) {
+          console.error('Error checking admin role:', error);
+        }
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, toast]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,7 +145,7 @@ const AdminAuth = () => {
     }
 
     try {
-      const redirectUrl = `${window.location.origin}/admin`;
+      const redirectUrl = `${window.location.origin}/admin-auth`;
       
       const { data, error } = await supabase.auth.signUp({
         email,

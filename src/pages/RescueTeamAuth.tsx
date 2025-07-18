@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,23 +27,75 @@ const RescueTeamAuth = () => {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
+        console.log('Rescue team auth state change:', event, session?.user?.id);
         setUser(session?.user ?? null);
+        
         if (session?.user) {
-          navigate("/rescue-team");
+          // Check if user has rescue_team role before redirecting
+          try {
+            const { data: roles } = await supabase
+              .from('user_roles')
+              .select('role')
+              .eq('user_id', session.user.id);
+
+            console.log('User roles:', roles);
+            const hasRescueTeamRole = roles?.some(r => r.role === 'rescue_team');
+            
+            if (hasRescueTeamRole) {
+              navigate("/rescue-team");
+            } else {
+              toast({
+                title: "Access Denied",
+                description: "You don't have rescue team privileges.",
+                variant: "destructive",
+              });
+              await supabase.auth.signOut();
+            }
+          } catch (error) {
+            console.error('Error checking rescue team role:', error);
+            toast({
+              title: "Error",
+              description: "Failed to verify rescue team privileges.",
+              variant: "destructive",
+            });
+          }
         }
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      console.log('Initial session check:', session?.user?.id);
       setUser(session?.user ?? null);
+      
       if (session?.user) {
-        navigate("/rescue-team");
+        // Check if user has rescue_team role
+        try {
+          const { data: roles } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', session.user.id);
+
+          const hasRescueTeamRole = roles?.some(r => r.role === 'rescue_team');
+          
+          if (hasRescueTeamRole) {
+            navigate("/rescue-team");
+          } else {
+            toast({
+              title: "Access Denied",
+              description: "You don't have rescue team privileges.",
+              variant: "destructive",
+            });
+            await supabase.auth.signOut();
+          }
+        } catch (error) {
+          console.error('Error checking rescue team role:', error);
+        }
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, toast]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,7 +141,7 @@ const RescueTeamAuth = () => {
     }
 
     try {
-      const redirectUrl = `${window.location.origin}/rescue-team`;
+      const redirectUrl = `${window.location.origin}/rescue-team-auth`;
       
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -181,7 +232,7 @@ const RescueTeamAuth = () => {
                   <span>Team Sign In</span>
                 </CardTitle>
                 <CardDescription>
-                  Access your rescue team dashboard
+                  Access your rescue team dashboard  
                 </CardDescription>
               </CardHeader>
               <CardContent>
