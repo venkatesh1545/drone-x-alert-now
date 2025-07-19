@@ -211,7 +211,7 @@ const AdminAuth = () => {
         // Wait a moment for the user to be fully created
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Assign admin role
+        // Assign admin role (the database trigger no longer auto-assigns 'user' role)
         const { error: roleError } = await supabase
           .from('user_roles')
           .insert({

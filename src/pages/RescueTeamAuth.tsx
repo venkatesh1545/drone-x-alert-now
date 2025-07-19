@@ -220,7 +220,7 @@ const RescueTeamAuth = () => {
             contact_email: email,
           });
 
-        // Assign rescue_team role
+        // Assign rescue_team role (the database trigger no longer auto-assigns 'user' role)
         const { error: roleError } = await supabase
           .from('user_roles')
           .insert({
