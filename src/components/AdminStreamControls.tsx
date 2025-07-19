@@ -9,13 +9,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { 
   Camera, Play, Square, Settings, Users, MapPin, 
-  Zap, AlertTriangle, Video, Signal 
+  Zap, AlertTriangle, Video, Signal, Smartphone, 
+  Plane, Monitor, Wifi, Bluetooth 
 } from 'lucide-react';
 import { useDroneStreaming, DroneStream } from '@/hooks/useDroneStreaming';
+import { useToast } from '@/hooks/use-toast';
 
 export const AdminStreamControls = () => {
   const { activeStreams, isAdmin, startStream, stopStream } = useDroneStreaming();
+  const { toast } = useToast();
   const [showStartForm, setShowStartForm] = useState(false);
+  const [isStartingStream, setIsStartingStream] = useState(false);
   const [formData, setFormData] = useState({
     stream_name: '',
     location: '',
@@ -25,31 +29,107 @@ export const AdminStreamControls = () => {
     stream_quality: 'HD' as 'SD' | 'HD' | '4K',
     emergency_level: 'medium' as 'low' | 'medium' | 'high' | 'critical',
     description: '',
+    device_type: 'mobile' as 'mobile' | 'drone' | 'camera' | 'laptop',
+    connection_mode: 'wifi' as 'wifi' | 'bluetooth',
   });
 
   if (!isAdmin) {
     return null;
   }
 
-  const handleStartStream = async () => {
-    const streamData = {
-      ...formData,
-      latitude: formData.latitude ? parseFloat(formData.latitude) : undefined,
-      longitude: formData.longitude ? parseFloat(formData.longitude) : undefined,
-    };
+  const requestCameraAccess = async () => {
+    try {
+      const constraints = {
+        video: {
+          width: { ideal: formData.stream_quality === '4K' ? 3840 : formData.stream_quality === 'HD' ? 1920 : 1280 },
+          height: { ideal: formData.stream_quality === '4K' ? 2160 : formData.stream_quality === 'HD' ? 1080 : 720 },
+          facingMode: formData.device_type === 'mobile' ? 'environment' : 'user'
+        },
+        audio: true
+      };
 
-    const stream = await startStream(streamData);
-    if (stream) {
-      setShowStartForm(false);
-      setFormData({
-        stream_name: '',
-        location: '',
-        latitude: '',
-        longitude: '',
-        is_active: true,
-        stream_quality: 'HD',
-        emergency_level: 'medium',
-        description: '',
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      return stream;
+    } catch (error) {
+      console.error('Camera access error:', error);
+      return null;
+    }
+  };
+
+  const handleStartStream = async () => {
+    if (!formData.stream_name || !formData.location) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in stream name and location",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsStartingStream(true);
+    try {
+      // Request camera access based on device type
+      const cameraStream = await requestCameraAccess();
+      if (!cameraStream) {
+        toast({
+          title: "Camera Access Denied",
+          description: "Please allow camera access to start the stream",
+          variant: "destructive"
+        });
+        setIsStartingStream(false);
+        return;
+      }
+
+      const streamData = {
+        ...formData,
+        latitude: formData.latitude ? parseFloat(formData.latitude) : undefined,
+        longitude: formData.longitude ? parseFloat(formData.longitude) : undefined,
+      };
+
+      const stream = await startStream(streamData);
+      if (stream) {
+        toast({
+          title: "Stream Started",
+          description: `Live stream "${formData.stream_name}" is now active`,
+        });
+        
+        setShowStartForm(false);
+        setFormData({
+          stream_name: '',
+          location: '',
+          latitude: '',
+          longitude: '',
+          is_active: true,
+          stream_quality: 'HD',
+          emergency_level: 'medium',
+          description: '',
+          device_type: 'mobile',
+          connection_mode: 'wifi',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Stream Error",
+        description: "Failed to start stream. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsStartingStream(false);
+    }
+  };
+
+  const handleStopStream = async (streamId: string) => {
+    try {
+      await stopStream(streamId);
+      toast({
+        title: "Stream Stopped",
+        description: "Live stream has been stopped",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to stop stream",
+        variant: "destructive"
       });
     }
   };
@@ -62,6 +142,22 @@ export const AdminStreamControls = () => {
       case 'low': return 'bg-green-100 text-green-700';
       default: return 'bg-gray-100 text-gray-700';
     }
+  };
+
+  const getDeviceIcon = (deviceType: string) => {
+    switch (deviceType) {
+      case 'mobile': return <Smartphone className="h-4 w-4" />;
+      case 'drone': return <Plane className="h-4 w-4" />;
+      case 'camera': return <Camera className="h-4 w-4" />;
+      case 'laptop': return <Monitor className="h-4 w-4" />;
+      default: return <Monitor className="h-4 w-4" />;
+    }
+  };
+
+  const getConnectionIcon = (connectionMode: string) => {
+    return connectionMode === 'wifi' ? 
+      <Wifi className="h-4 w-4" /> : 
+      <Bluetooth className="h-4 w-4" />;
   };
 
   return (
@@ -181,6 +277,71 @@ export const AdminStreamControls = () => {
                 </Select>
               </div>
             </div>
+            
+            {/* Device and Connection Settings */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="device_type">Device Type</Label>
+                <Select value={formData.device_type} onValueChange={(value: 'mobile' | 'drone' | 'camera' | 'laptop') => 
+                  setFormData(prev => ({ ...prev, device_type: value }))
+                }>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mobile">
+                      <div className="flex items-center gap-2">
+                        <Smartphone className="h-4 w-4" />
+                        Mobile Device
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="drone">
+                      <div className="flex items-center gap-2">
+                        <Plane className="h-4 w-4" />
+                        Drone Camera
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="camera">
+                      <div className="flex items-center gap-2">
+                        <Camera className="h-4 w-4" />
+                        External Camera
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="laptop">
+                      <div className="flex items-center gap-2">
+                        <Monitor className="h-4 w-4" />
+                        Laptop Camera
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="connection_mode">Connection Mode</Label>
+                <Select value={formData.connection_mode} onValueChange={(value: 'wifi' | 'bluetooth') => 
+                  setFormData(prev => ({ ...prev, connection_mode: value }))
+                }>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="wifi">
+                      <div className="flex items-center gap-2">
+                        <Wifi className="h-4 w-4" />
+                        WiFi
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="bluetooth">
+                      <div className="flex items-center gap-2">
+                        <Bluetooth className="h-4 w-4" />
+                        Bluetooth
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="description">Description (Optional)</Label>
               <Textarea
@@ -192,9 +353,13 @@ export const AdminStreamControls = () => {
               />
             </div>
             <div className="flex space-x-3">
-              <Button onClick={handleStartStream} className="bg-green-600 hover:bg-green-700">
+              <Button 
+                onClick={handleStartStream} 
+                disabled={isStartingStream}
+                className="bg-green-600 hover:bg-green-700"
+              >
                 <Play className="h-4 w-4 mr-2" />
-                Start Stream
+                {isStartingStream ? 'Starting Stream...' : 'Start Stream'}
               </Button>
               <Button variant="outline" onClick={() => setShowStartForm(false)}>
                 Cancel
@@ -249,11 +414,19 @@ export const AdminStreamControls = () => {
                             <Video className="h-4 w-4 mr-1" />
                             {stream.stream_quality}
                           </div>
+                          <div className="flex items-center">
+                            {getDeviceIcon((stream as any).device_type || 'mobile')}
+                            <span className="ml-1">{(stream as any).device_type || 'Mobile'}</span>
+                          </div>
+                          <div className="flex items-center">
+                            {getConnectionIcon((stream as any).connection_mode || 'wifi')}
+                            <span className="ml-1">{(stream as any).connection_mode || 'WiFi'}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
                     <Button
-                      onClick={() => stopStream(stream.id)}
+                      onClick={() => handleStopStream(stream.id)}
                       variant="outline"
                       className="border-red-300 text-red-600 hover:bg-red-50"
                     >
