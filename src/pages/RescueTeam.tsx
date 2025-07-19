@@ -13,7 +13,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
-import { TeamLocationTracker } from "@/components/TeamLocationTracker";
+import TeamLocationTracker from "@/components/TeamLocationTracker";
 import { RescueMissions } from "@/components/RescueMissions";
 
 const RescueTeam = () => {
