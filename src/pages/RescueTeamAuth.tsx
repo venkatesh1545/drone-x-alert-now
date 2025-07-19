@@ -14,6 +14,7 @@ import type { User } from "@supabase/supabase-js";
 const RescueTeamAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
+  const [checkingRole, setCheckingRole] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -25,58 +26,95 @@ const RescueTeamAuth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const checkRescueTeamRoleWithRetry = async (userId: string, retries = 3): Promise<boolean> => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        console.log(`Checking rescue team role for user ${userId}, attempt ${i + 1}`);
+        
+        // Add a small delay to ensure database operations are complete
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        const { data: roles, error } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', userId);
+
+        if (error) {
+          console.error('Error checking rescue team role:', error);
+          if (i === retries - 1) throw error;
+          continue;
+        }
+
+        console.log('User roles found:', roles);
+        const hasRescueTeamRole = roles?.some(r => r.role === 'rescue_team');
+        
+        if (hasRescueTeamRole) {
+          return true;
+        }
+        
+        // If no rescue team role found and this isn't the last retry, wait and try again
+        if (i < retries - 1) {
+          console.log('No rescue team role found, retrying...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      } catch (error) {
+        console.error(`Role check attempt ${i + 1} failed:`, error);
+        if (i === retries - 1) throw error;
+      }
+    }
+    
+    return false;
+  };
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Rescue team auth state change:', event, session?.user?.id);
         setUser(session?.user ?? null);
         
-        if (session?.user) {
-          // Check if user has rescue_team role before redirecting
+        if (session?.user && event === 'SIGNED_IN') {
+          setCheckingRole(true);
           try {
-            const { data: roles } = await supabase
-              .from('user_roles')
-              .select('role')
-              .eq('user_id', session.user.id);
-
-            console.log('User roles:', roles);
-            const hasRescueTeamRole = roles?.some(r => r.role === 'rescue_team');
+            const hasRescueTeamRole = await checkRescueTeamRoleWithRetry(session.user.id);
             
             if (hasRescueTeamRole) {
-        navigate("/rescue-team");
+              console.log('Rescue team role confirmed, redirecting to /rescue-team');
+              navigate("/rescue-team");
             } else {
+              console.log('No rescue team role found after retries');
               toast({
                 title: "Access Denied",
-                description: "You don't have rescue team privileges.",
+                description: "You don't have rescue team privileges. Please contact the system administrator.",
                 variant: "destructive",
               });
               await supabase.auth.signOut();
             }
           } catch (error) {
-            console.error('Error checking rescue team role:', error);
+            console.error('Error during role verification:', error);
             toast({
               title: "Error",
-              description: "Failed to verify rescue team privileges.",
+              description: "Failed to verify rescue team privileges. Please try again.",
               variant: "destructive",
             });
+            await supabase.auth.signOut();
+          } finally {
+            setCheckingRole(false);
           }
         }
       }
     );
 
+    // Check initial session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       console.log('Initial session check:', session?.user?.id);
       setUser(session?.user ?? null);
       
       if (session?.user) {
-        // Check if user has rescue_team role
+        setCheckingRole(true);
         try {
-          const { data: roles } = await supabase
-            .from('user_roles')
-            .select('role')
-            .eq('user_id', session.user.id);
-
-          const hasRescueTeamRole = roles?.some(r => r.role === 'rescue_team');
+          const hasRescueTeamRole = await checkRescueTeamRoleWithRetry(session.user.id);
           
           if (hasRescueTeamRole) {
             navigate("/rescue-team");
@@ -89,7 +127,9 @@ const RescueTeamAuth = () => {
             await supabase.auth.signOut();
           }
         } catch (error) {
-          console.error('Error checking rescue team role:', error);
+          console.error('Error checking initial rescue team role:', error);
+        } finally {
+          setCheckingRole(false);
         }
       }
     });
@@ -110,13 +150,16 @@ const RescueTeamAuth = () => {
 
       if (error) {
         setError(error.message);
+        console.error('Sign in error:', error);
       } else {
+        console.log('Sign in successful, auth state change will handle redirect');
         toast({
-          title: "Welcome back, Rescue Team!",
-          description: "You've been signed in successfully.",
+          title: "Authentication Successful",
+          description: "Verifying rescue team privileges...",
         });
       }
     } catch (err) {
+      console.error('Unexpected sign in error:', err);
       setError("An unexpected error occurred. Please try again.");
     } finally {
       setLoading(false);
@@ -159,7 +202,13 @@ const RescueTeamAuth = () => {
 
       if (error) {
         setError(error.message);
+        console.error('Sign up error:', error);
       } else if (data.user) {
+        console.log('User created, creating rescue team profile and assigning role...');
+        
+        // Wait a moment for the user to be fully created
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         // Create rescue team profile
         const { error: teamError } = await supabase
           .from('rescue_teams')
@@ -180,23 +229,42 @@ const RescueTeamAuth = () => {
           });
 
         if (teamError || roleError) {
-          console.error('Error creating team profile:', teamError || roleError);
+          console.error('Error creating team profile or role:', teamError || roleError);
+          toast({
+            title: "Warning",
+            description: "Account created but team setup failed. Please contact support.",
+            variant: "destructive",
+          });
+        } else {
+          console.log('Rescue team profile and role assigned successfully');
         }
 
         toast({
           title: "Rescue Team Account Created!",
-          description: "Please check your email to verify your account.",
+          description: "Please check your email to verify your account before signing in.",
         });
       }
     } catch (err) {
+      console.error('Unexpected sign up error:', err);
       setError("An unexpected error occurred. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (user) {
-    return null;
+  if (user && checkingRole) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-red-50 to-orange-50 flex items-center justify-center">
+        <div className="text-center">
+          <Shield className="h-12 w-12 text-orange-500 mx-auto mb-4 animate-pulse" />
+          <p className="text-gray-600">Verifying rescue team privileges...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (user && !checkingRole) {
+    return null; // Will redirect or show error
   }
 
   return (

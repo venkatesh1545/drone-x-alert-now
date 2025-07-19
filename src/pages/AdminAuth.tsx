@@ -14,6 +14,7 @@ import type { User } from "@supabase/supabase-js";
 const AdminAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
+  const [checkingRole, setCheckingRole] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -23,58 +24,95 @@ const AdminAuth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const checkAdminRoleWithRetry = async (userId: string, retries = 3): Promise<boolean> => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        console.log(`Checking admin role for user ${userId}, attempt ${i + 1}`);
+        
+        // Add a small delay to ensure database operations are complete
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        const { data: roles, error } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', userId);
+
+        if (error) {
+          console.error('Error checking admin role:', error);
+          if (i === retries - 1) throw error;
+          continue;
+        }
+
+        console.log('User roles found:', roles);
+        const hasAdminRole = roles?.some(r => r.role === 'admin');
+        
+        if (hasAdminRole) {
+          return true;
+        }
+        
+        // If no admin role found and this isn't the last retry, wait and try again
+        if (i < retries - 1) {
+          console.log('No admin role found, retrying...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      } catch (error) {
+        console.error(`Role check attempt ${i + 1} failed:`, error);
+        if (i === retries - 1) throw error;
+      }
+    }
+    
+    return false;
+  };
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Admin auth state change:', event, session?.user?.id);
         setUser(session?.user ?? null);
         
-        if (session?.user) {
-          // Check if user has admin role before redirecting
+        if (session?.user && event === 'SIGNED_IN') {
+          setCheckingRole(true);
           try {
-            const { data: roles } = await supabase
-              .from('user_roles')
-              .select('role')
-              .eq('user_id', session.user.id);
-
-            console.log('User roles:', roles);
-            const hasAdminRole = roles?.some(r => r.role === 'admin');
+            const hasAdminRole = await checkAdminRoleWithRetry(session.user.id);
             
             if (hasAdminRole) {
-        navigate("/admin");
+              console.log('Admin role confirmed, redirecting to /admin');
+              navigate("/admin");
             } else {
+              console.log('No admin role found after retries');
               toast({
                 title: "Access Denied",
-                description: "You don't have admin privileges.",
+                description: "You don't have admin privileges. Please contact the system administrator.",
                 variant: "destructive",
               });
               await supabase.auth.signOut();
             }
           } catch (error) {
-            console.error('Error checking admin role:', error);
+            console.error('Error during role verification:', error);
             toast({
               title: "Error",
-              description: "Failed to verify admin privileges.",
+              description: "Failed to verify admin privileges. Please try again.",
               variant: "destructive",
             });
+            await supabase.auth.signOut();
+          } finally {
+            setCheckingRole(false);
           }
         }
       }
     );
 
+    // Check initial session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       console.log('Initial session check:', session?.user?.id);
       setUser(session?.user ?? null);
       
       if (session?.user) {
-        // Check if user has admin role
+        setCheckingRole(true);
         try {
-          const { data: roles } = await supabase
-            .from('user_roles')
-            .select('role')
-            .eq('user_id', session.user.id);
-
-          const hasAdminRole = roles?.some(r => r.role === 'admin');
+          const hasAdminRole = await checkAdminRoleWithRetry(session.user.id);
           
           if (hasAdminRole) {
             navigate("/admin");
@@ -87,7 +125,9 @@ const AdminAuth = () => {
             await supabase.auth.signOut();
           }
         } catch (error) {
-          console.error('Error checking admin role:', error);
+          console.error('Error checking initial admin role:', error);
+        } finally {
+          setCheckingRole(false);
         }
       }
     });
@@ -108,13 +148,16 @@ const AdminAuth = () => {
 
       if (error) {
         setError(error.message);
+        console.error('Sign in error:', error);
       } else {
+        console.log('Sign in successful, auth state change will handle redirect');
         toast({
-          title: "Welcome, Administrator!",
-          description: "You've been signed in successfully.",
+          title: "Authentication Successful",
+          description: "Verifying admin privileges...",
         });
       }
     } catch (err) {
+      console.error('Unexpected sign in error:', err);
       setError("An unexpected error occurred. Please try again.");
     } finally {
       setLoading(false);
@@ -161,7 +204,13 @@ const AdminAuth = () => {
 
       if (error) {
         setError(error.message);
+        console.error('Sign up error:', error);
       } else if (data.user) {
+        console.log('User created, assigning admin role...');
+        
+        // Wait a moment for the user to be fully created
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         // Assign admin role
         const { error: roleError } = await supabase
           .from('user_roles')
@@ -172,22 +221,41 @@ const AdminAuth = () => {
 
         if (roleError) {
           console.error('Error creating admin role:', roleError);
+          toast({
+            title: "Warning",
+            description: "Account created but admin role assignment failed. Please contact support.",
+            variant: "destructive",
+          });
+        } else {
+          console.log('Admin role assigned successfully');
         }
 
         toast({
           title: "Admin Account Created!",
-          description: "Please check your email to verify your account.",
+          description: "Please check your email to verify your account before signing in.",
         });
       }
     } catch (err) {
+      console.error('Unexpected sign up error:', err);
       setError("An unexpected error occurred. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (user) {
-    return null;
+  if (user && checkingRole) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <Shield className="h-12 w-12 text-slate-500 mx-auto mb-4 animate-pulse" />
+          <p className="text-gray-600">Verifying admin privileges...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (user && !checkingRole) {
+    return null; // Will redirect or show error
   }
 
   return (

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,11 +66,11 @@ const Admin = () => {
           description: "You don't have admin privileges.",
           variant: "destructive",
         });
-        navigate("/dashboard");
+        navigate("/admin-auth");
       }
     } catch (error) {
       console.error('Error checking admin role:', error);
-      navigate("/dashboard");
+      navigate("/admin-auth");
     }
   };
 
