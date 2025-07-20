@@ -204,39 +204,51 @@ const RescueTeamAuth = () => {
         setError(error.message);
         console.error('Sign up error:', error);
       } else if (data.user) {
-        console.log('User created, creating rescue team profile and assigning role...');
+        console.log('User created successfully:', data.user.id);
         
-        // Wait a moment for the user to be fully created
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Wait a moment for the user to be fully created and database triggers to complete  
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // Create rescue team profile
-        const { error: teamError } = await supabase
-          .from('rescue_teams')
-          .insert({
-            user_id: data.user.id,
-            team_name: teamName,
-            specialization: specialization,
-            contact_phone: contactPhone,
-            contact_email: email,
-          });
+        try {
+          // Create rescue team profile
+          const { error: teamError } = await supabase
+            .from('rescue_teams')
+            .insert({
+              user_id: data.user.id,
+              team_name: teamName,
+              specialization: specialization,
+              contact_phone: contactPhone,
+              contact_email: email,
+            });
 
-        // Assign rescue_team role (the database trigger no longer auto-assigns 'user' role)
-        const { error: roleError } = await supabase
-          .from('user_roles')
-          .insert({
-            user_id: data.user.id,
-            role: 'rescue_team',
-          });
+          // Assign rescue_team role (the database trigger no longer auto-assigns 'user' role)
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .insert({
+              user_id: data.user.id,
+              role: 'rescue_team',
+            });
 
-        if (teamError || roleError) {
-          console.error('Error creating team profile or role:', teamError || roleError);
-          toast({
-            title: "Warning",
-            description: "Account created but team setup failed. Please contact support.",
-            variant: "destructive",
-          });
-        } else {
-          console.log('Rescue team profile and role assigned successfully');
+          if (teamError || roleError) {
+            console.error('Error creating team profile or role:', teamError || roleError);
+            toast({
+              title: "Warning",
+              description: "Account created but team setup failed. Please contact support.",
+              variant: "destructive",
+            });
+          } else {
+            console.log('Rescue team profile and role assigned successfully for user:', data.user.id);
+            
+            // Verify the role was actually inserted
+            const { data: verifyRoles, error: verifyError } = await supabase
+              .from('user_roles')
+              .select('role')
+              .eq('user_id', data.user.id);
+              
+            console.log('Role verification result:', verifyRoles, verifyError);
+          }
+        } catch (error) {
+          console.error('Error during rescue team setup:', error);
         }
 
         toast({

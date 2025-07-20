@@ -206,28 +206,40 @@ const AdminAuth = () => {
         setError(error.message);
         console.error('Sign up error:', error);
       } else if (data.user) {
-        console.log('User created, assigning admin role...');
+        console.log('User created successfully:', data.user.id);
         
-        // Wait a moment for the user to be fully created
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Wait a moment for the user to be fully created and database triggers to complete
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // Assign admin role (the database trigger no longer auto-assigns 'user' role)
-        const { error: roleError } = await supabase
-          .from('user_roles')
-          .insert({
-            user_id: data.user.id,
-            role: 'admin',
-          });
+        try {
+          // Assign admin role (the database trigger no longer auto-assigns 'user' role)
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .insert({
+              user_id: data.user.id,
+              role: 'admin',
+            });
 
-        if (roleError) {
-          console.error('Error creating admin role:', roleError);
-          toast({
-            title: "Warning",
-            description: "Account created but admin role assignment failed. Please contact support.",
-            variant: "destructive",
-          });
-        } else {
-          console.log('Admin role assigned successfully');
+          if (roleError) {
+            console.error('Error creating admin role:', roleError);
+            toast({
+              title: "Warning", 
+              description: "Account created but admin role assignment failed. Please contact support.",
+              variant: "destructive",
+            });
+          } else {
+            console.log('Admin role assigned successfully for user:', data.user.id);
+            
+            // Verify the role was actually inserted
+            const { data: verifyRoles, error: verifyError } = await supabase
+              .from('user_roles')
+              .select('role')
+              .eq('user_id', data.user.id);
+              
+            console.log('Role verification result:', verifyRoles, verifyError);
+          }
+        } catch (error) {
+          console.error('Error during admin role assignment:', error);
         }
 
         toast({
