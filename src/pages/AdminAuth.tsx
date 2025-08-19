@@ -29,18 +29,18 @@ const AdminAuth = () => {
     try {
       console.log(`Checking admin role for user: ${userId}`);
       
-      const { data: roles, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId);
+      const { data, error } = await supabase.rpc('has_role', {
+        check_user_id: userId,
+        role_name: 'admin'
+      });
 
       if (error) {
         console.error('Error checking admin role:', error);
         return false;
       }
 
-      console.log('User roles found:', roles);
-      return roles?.some(r => r.role === 'admin') || false;
+      console.log('Admin role check result:', data);
+      return data || false;
     } catch (error) {
       console.error('Error in checkAdminRole:', error);
       return false;
@@ -52,12 +52,12 @@ const AdminAuth = () => {
       console.log(`Assigning admin role to user: ${userId}`);
       
       // First check if role already exists
-      const { data: existingRoles } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId);
+      const hasAdmin = await supabase.rpc('has_role', {
+        check_user_id: userId,
+        role_name: 'admin'
+      });
 
-      if (existingRoles?.some(r => r.role === 'admin')) {
+      if (hasAdmin.data) {
         console.log('Admin role already exists');
         return true;
       }
@@ -226,7 +226,7 @@ const AdminAuth = () => {
         console.log('User created successfully:', data.user.id);
         
         // Wait a moment for the user to be fully created
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 3000));
         
         // Assign admin role
         const roleAssigned = await assignAdminRole(data.user.id);

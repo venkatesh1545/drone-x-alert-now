@@ -546,8 +546,16 @@ export type Database = {
         Args: { emergency_id: string }
         Returns: string
       }
+      get_user_role: {
+        Args: { user_id?: string }
+        Returns: string
+      }
       has_role: {
-        Args: { role_name: string; user_id: string }
+        Args: { check_user_id: string; role_name: string }
+        Returns: boolean
+      }
+      is_admin: {
+        Args: { user_id?: string }
         Returns: boolean
       }
     }

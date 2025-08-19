@@ -26,46 +26,26 @@ const RescueTeamAuth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const checkRescueTeamRoleWithRetry = async (userId: string, retries = 3): Promise<boolean> => {
-    for (let i = 0; i < retries; i++) {
-      try {
-        console.log(`Checking rescue team role for user ${userId}, attempt ${i + 1}`);
-        
-        // Add a small delay to ensure database operations are complete
-        if (i > 0) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-        
-        const { data: roles, error } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', userId);
+  const checkRescueTeamRole = async (userId: string): Promise<boolean> => {
+    try {
+      console.log(`Checking rescue team role for user: ${userId}`);
+      
+      const { data, error } = await supabase.rpc('has_role', {
+        check_user_id: userId,
+        role_name: 'rescue_team'
+      });
 
-        if (error) {
-          console.error('Error checking rescue team role:', error);
-          if (i === retries - 1) throw error;
-          continue;
-        }
-
-        console.log('User roles found:', roles);
-        const hasRescueTeamRole = roles?.some(r => r.role === 'rescue_team');
-        
-        if (hasRescueTeamRole) {
-          return true;
-        }
-        
-        // If no rescue team role found and this isn't the last retry, wait and try again
-        if (i < retries - 1) {
-          console.log('No rescue team role found, retrying...');
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-      } catch (error) {
-        console.error(`Role check attempt ${i + 1} failed:`, error);
-        if (i === retries - 1) throw error;
+      if (error) {
+        console.error('Error checking rescue team role:', error);
+        return false;
       }
+
+      console.log('Rescue team role check result:', data);
+      return data || false;
+    } catch (error) {
+      console.error('Error in checkRescueTeamRole:', error);
+      return false;
     }
-    
-    return false;
   };
 
   useEffect(() => {
@@ -77,7 +57,7 @@ const RescueTeamAuth = () => {
         if (session?.user && event === 'SIGNED_IN') {
           setCheckingRole(true);
           try {
-            const hasRescueTeamRole = await checkRescueTeamRoleWithRetry(session.user.id);
+            const hasRescueTeamRole = await checkRescueTeamRole(session.user.id);
             
             if (hasRescueTeamRole) {
               console.log('Rescue team role confirmed, redirecting to /rescue-team');
@@ -114,7 +94,7 @@ const RescueTeamAuth = () => {
       if (session?.user) {
         setCheckingRole(true);
         try {
-          const hasRescueTeamRole = await checkRescueTeamRoleWithRetry(session.user.id);
+          const hasRescueTeamRole = await checkRescueTeamRole(session.user.id);
           
           if (hasRescueTeamRole) {
             navigate("/rescue-team");
@@ -207,7 +187,7 @@ const RescueTeamAuth = () => {
         console.log('User created, creating rescue team profile and assigning role...');
         
         // Wait a moment for the user to be fully created
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 3000));
         
         // Create rescue team profile
         const { error: teamError } = await supabase
@@ -220,7 +200,7 @@ const RescueTeamAuth = () => {
             contact_email: email,
           });
 
-        // Assign rescue_team role (the database trigger no longer auto-assigns 'user' role)
+        // Assign rescue_team role
         const { error: roleError } = await supabase
           .from('user_roles')
           .insert({

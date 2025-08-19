@@ -91,7 +91,7 @@ const Auth = () => {
     try {
       const redirectUrl = `${window.location.origin}/dashboard`;
       
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -104,7 +104,24 @@ const Auth = () => {
 
       if (error) {
         setError(error.message);
-      } else {
+      } else if (data.user) {
+        console.log('User created successfully:', data.user.id);
+        
+        // Wait a moment for the user to be fully created
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        // Assign default user role
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .insert({
+            user_id: data.user.id,
+            role: 'user',
+          });
+
+        if (roleError) {
+          console.error('Error assigning user role:', roleError);
+        }
+
         toast({
           title: "Account created successfully!",
           description: "Please check your email to verify your account.",
