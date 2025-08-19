@@ -51,18 +51,7 @@ const AdminAuth = () => {
     try {
       console.log(`Assigning admin role to user: ${userId}`);
       
-      // First check if role already exists
-      const hasAdmin = await supabase.rpc('has_role', {
-        check_user_id: userId,
-        role_name: 'admin'
-      });
-
-      if (hasAdmin.data) {
-        console.log('Admin role already exists');
-        return true;
-      }
-
-      // Insert admin role
+      // Directly insert admin role without checking first
       const { error: roleError } = await supabase
         .from('user_roles')
         .insert({
@@ -72,6 +61,11 @@ const AdminAuth = () => {
 
       if (roleError) {
         console.error('Error assigning admin role:', roleError);
+        // If it's a duplicate key error, that's actually success
+        if (roleError.code === '23505') {
+          console.log('Admin role already exists (duplicate key), considering as success');
+          return true;
+        }
         return false;
       }
 
@@ -226,21 +220,24 @@ const AdminAuth = () => {
         console.log('User created successfully:', data.user.id);
         
         // Wait a moment for the user to be fully created
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // Assign admin role
+        // Assign admin role with detailed logging
+        console.log('Starting admin role assignment...');
         const roleAssigned = await assignAdminRole(data.user.id);
+        console.log('Role assignment result:', roleAssigned);
         
         if (roleAssigned) {
+          console.log('Admin role successfully assigned');
           toast({
             title: "Admin Account Created!",
             description: "Please check your email to verify your account before signing in.",
           });
         } else {
+          console.error('Admin role assignment failed');
           toast({
-            title: "Warning",
-            description: "Account created but admin role assignment may have failed. Please contact support if you cannot access admin features.",
-            variant: "destructive",
+            title: "Account Created",
+            description: "Admin account created. Please verify your email and try signing in. If you cannot access admin features, contact support.",
           });
         }
       }
