@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,46 +25,62 @@ const AdminAuth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const checkAdminRoleWithRetry = async (userId: string, retries = 3): Promise<boolean> => {
-    for (let i = 0; i < retries; i++) {
-      try {
-        console.log(`Checking admin role for user ${userId}, attempt ${i + 1}`);
-        
-        // Add a small delay to ensure database operations are complete
-        if (i > 0) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-        
-        const { data: roles, error } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', userId);
+  const checkAdminRole = async (userId: string): Promise<boolean> => {
+    try {
+      console.log(`Checking admin role for user: ${userId}`);
+      
+      const { data: roles, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId);
 
-        if (error) {
-          console.error('Error checking admin role:', error);
-          if (i === retries - 1) throw error;
-          continue;
-        }
-
-        console.log('User roles found:', roles);
-        const hasAdminRole = roles?.some(r => r.role === 'admin');
-        
-        if (hasAdminRole) {
-          return true;
-        }
-        
-        // If no admin role found and this isn't the last retry, wait and try again
-        if (i < retries - 1) {
-          console.log('No admin role found, retrying...');
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-      } catch (error) {
-        console.error(`Role check attempt ${i + 1} failed:`, error);
-        if (i === retries - 1) throw error;
+      if (error) {
+        console.error('Error checking admin role:', error);
+        return false;
       }
+
+      console.log('User roles found:', roles);
+      return roles?.some(r => r.role === 'admin') || false;
+    } catch (error) {
+      console.error('Error in checkAdminRole:', error);
+      return false;
     }
-    
-    return false;
+  };
+
+  const assignAdminRole = async (userId: string): Promise<boolean> => {
+    try {
+      console.log(`Assigning admin role to user: ${userId}`);
+      
+      // First check if role already exists
+      const { data: existingRoles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId);
+
+      if (existingRoles?.some(r => r.role === 'admin')) {
+        console.log('Admin role already exists');
+        return true;
+      }
+
+      // Insert admin role
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .insert({
+          user_id: userId,
+          role: 'admin'
+        });
+
+      if (roleError) {
+        console.error('Error assigning admin role:', roleError);
+        return false;
+      }
+
+      console.log('Admin role assigned successfully');
+      return true;
+    } catch (error) {
+      console.error('Error in assignAdminRole:', error);
+      return false;
+    }
   };
 
   useEffect(() => {
@@ -75,13 +92,13 @@ const AdminAuth = () => {
         if (session?.user && event === 'SIGNED_IN') {
           setCheckingRole(true);
           try {
-            const hasAdminRole = await checkAdminRoleWithRetry(session.user.id);
+            const hasAdminRole = await checkAdminRole(session.user.id);
             
             if (hasAdminRole) {
               console.log('Admin role confirmed, redirecting to /admin');
               navigate("/admin");
             } else {
-              console.log('No admin role found after retries');
+              console.log('No admin role found');
               toast({
                 title: "Access Denied",
                 description: "You don't have admin privileges. Please contact the system administrator.",
@@ -112,7 +129,7 @@ const AdminAuth = () => {
       if (session?.user) {
         setCheckingRole(true);
         try {
-          const hasAdminRole = await checkAdminRoleWithRetry(session.user.id);
+          const hasAdminRole = await checkAdminRole(session.user.id);
           
           if (hasAdminRole) {
             navigate("/admin");
@@ -206,34 +223,26 @@ const AdminAuth = () => {
         setError(error.message);
         console.error('Sign up error:', error);
       } else if (data.user) {
-        console.log('User created, assigning admin role...');
+        console.log('User created successfully:', data.user.id);
         
         // Wait a moment for the user to be fully created
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // Assign admin role (the database trigger no longer auto-assigns 'user' role)
-        const { error: roleError } = await supabase
-          .from('user_roles')
-          .insert({
-            user_id: data.user.id,
-            role: 'admin',
-          });
-
-        if (roleError) {
-          console.error('Error creating admin role:', roleError);
+        // Assign admin role
+        const roleAssigned = await assignAdminRole(data.user.id);
+        
+        if (roleAssigned) {
           toast({
-            title: "Warning",
-            description: "Account created but admin role assignment failed. Please contact support.",
-            variant: "destructive",
+            title: "Admin Account Created!",
+            description: "Please check your email to verify your account before signing in.",
           });
         } else {
-          console.log('Admin role assigned successfully');
+          toast({
+            title: "Warning",
+            description: "Account created but admin role assignment may have failed. Please contact support if you cannot access admin features.",
+            variant: "destructive",
+          });
         }
-
-        toast({
-          title: "Admin Account Created!",
-          description: "Please check your email to verify your account before signing in.",
-        });
       }
     } catch (err) {
       console.error('Unexpected sign up error:', err);
