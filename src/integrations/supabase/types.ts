@@ -293,7 +293,7 @@ export type Database = {
           blood_group: string | null
           created_at: string
           father_name: string | null
-          full_name: string
+          full_name: string | null
           government_id: string | null
           guardian_name: string | null
           height: number | null
@@ -311,7 +311,7 @@ export type Database = {
           blood_group?: string | null
           created_at?: string
           father_name?: string | null
-          full_name: string
+          full_name?: string | null
           government_id?: string | null
           guardian_name?: string | null
           height?: number | null
@@ -329,7 +329,7 @@ export type Database = {
           blood_group?: string | null
           created_at?: string
           father_name?: string | null
-          full_name?: string
+          full_name?: string | null
           government_id?: string | null
           guardian_name?: string | null
           height?: number | null
