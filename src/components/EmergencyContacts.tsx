@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Phone, Mail, Plus, Trash2, User, Save, Edit, Heart } from "lucide-react";
+import { Phone, Mail, Plus, Trash2, User, Save, Edit, Heart, List, Network } from "lucide-react";
+import { EmergencyContactsGraph } from "./EmergencyContactsGraph";
 
 interface EmergencyContact {
   id?: string;
@@ -27,6 +28,7 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
   const [editingContact, setEditingContact] = useState<EmergencyContact | null>(null);
   const [loading, setLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
   const { toast } = useToast();
 
   useEffect(() => {
@@ -334,20 +336,44 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
         </Card>
       )}
 
-      {/* Contact List */}
+      {/* Contact List/Graph */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h4 className="font-medium text-gray-900">Emergency Contacts ({contacts.length}/5)</h4>
-          {!editingContact && contacts.length < 5 && (
-            <Button 
-              size="sm" 
-              onClick={() => startEditing()}
-              className="bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Add Contact
-            </Button>
-          )}
+          <div className="flex items-center space-x-2">
+            {/* View Toggle */}
+            <div className="flex bg-gray-100 rounded-lg p-1">
+              <Button
+                size="sm"
+                variant={viewMode === 'list' ? 'default' : 'ghost'}
+                onClick={() => setViewMode('list')}
+                className={`h-8 px-3 ${viewMode === 'list' ? 'bg-white shadow-sm' : ''}`}
+              >
+                <List className="h-4 w-4 mr-1" />
+                List
+              </Button>
+              <Button
+                size="sm"
+                variant={viewMode === 'graph' ? 'default' : 'ghost'}
+                onClick={() => setViewMode('graph')}
+                className={`h-8 px-3 ${viewMode === 'graph' ? 'bg-white shadow-sm' : ''}`}
+              >
+                <Network className="h-4 w-4 mr-1" />
+                Graph
+              </Button>
+            </div>
+            
+            {!editingContact && contacts.length < 5 && (
+              <Button 
+                size="sm" 
+                onClick={() => startEditing()}
+                className="bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Contact
+              </Button>
+            )}
+          </div>
         </div>
 
         {contacts.length === 0 ? (
@@ -356,6 +382,8 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
             <p className="text-lg font-medium mb-1">No emergency contacts yet</p>
             <p className="text-sm">Add up to 5 emergency contacts for immediate notifications</p>
           </div>
+        ) : viewMode === 'graph' ? (
+          <EmergencyContactsGraph contacts={contacts} />
         ) : (
           contacts.map((contact) => (
             <Card key={contact.id} className="border-sky-100">
