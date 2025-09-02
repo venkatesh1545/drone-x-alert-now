@@ -219,6 +219,8 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
+          location_sharing_duration: number | null
+          location_sharing_enabled: boolean | null
           name: string
           phone: string
           priority: number | null
@@ -229,6 +231,8 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          location_sharing_duration?: number | null
+          location_sharing_enabled?: boolean | null
           name: string
           phone: string
           priority?: number | null
@@ -239,6 +243,8 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          location_sharing_duration?: number | null
+          location_sharing_enabled?: boolean | null
           name?: string
           phone?: string
           priority?: number | null
@@ -440,6 +446,45 @@ export type Database = {
           specialization?: string | null
           status?: string | null
           team_name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      shared_locations: {
+        Row: {
+          accuracy: number | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          latitude: number
+          longitude: number
+          shared_with: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accuracy?: number | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          latitude: number
+          longitude: number
+          shared_with: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accuracy?: number | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          latitude?: number
+          longitude?: number
+          shared_with?: string
           updated_at?: string
           user_id?: string
         }

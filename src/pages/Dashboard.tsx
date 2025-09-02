@@ -15,8 +15,10 @@ import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { RealtimeDroneStream } from "@/components/RealtimeDroneStream";
 import { AdminStreamControls } from "@/components/AdminStreamControls";
 import { LiveMap } from "@/components/LiveMap";
+import GoogleMap from "@/components/GoogleMap";
 import { ProfileForm } from "@/components/ProfileForm";
 import { EmergencyContacts } from "@/components/EmergencyContacts";
+import { LocationSharing } from "@/components/LocationSharing";
 
 const Dashboard = () => {
   const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -274,7 +276,7 @@ const Dashboard = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <LiveMap fullSize />
+                <GoogleMap fullSize={true} showEmergencies={true} showSharedLocations={true} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -286,36 +288,43 @@ const Dashboard = () => {
           )}
 
           <TabsContent value="profile">
-            <div className="grid lg:grid-cols-2 gap-6">
-              <Card className="border-sky-100">
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <User className="h-5 w-5 mr-2 text-sky-500" />
-                    Personal Information
-                  </CardTitle>
-                  <CardDescription>
-                    Update your profile and emergency details
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ProfileForm />
-                </CardContent>
-              </Card>
+            <div className="space-y-6">
+              <div className="grid lg:grid-cols-2 gap-6">
+                <Card className="border-sky-100">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <User className="h-5 w-5 mr-2 text-sky-500" />
+                      Personal Information
+                    </CardTitle>
+                    <CardDescription>
+                      Update your profile and emergency details
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ProfileForm />
+                  </CardContent>
+                </Card>
 
-              <Card className="border-sky-100">
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Phone className="h-5 w-5 mr-2 text-sky-500" />
-                    Emergency Contacts
-                  </CardTitle>
-                  <CardDescription>
-                    Manage your emergency contact list (up to 5 contacts)
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <EmergencyContacts />
-                </CardContent>
-              </Card>
+                <Card className="border-sky-100">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Phone className="h-5 w-5 mr-2 text-sky-500" />
+                      Emergency Contacts
+                    </CardTitle>
+                    <CardDescription>
+                      Manage your emergency contact list (up to 5 contacts)
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <EmergencyContacts />
+                  </CardContent>
+                </Card>
+              </div>
+              
+              <LocationSharing 
+                contacts={[]} 
+                onContactUpdate={() => {}} 
+              />
             </div>
           </TabsContent>
 
