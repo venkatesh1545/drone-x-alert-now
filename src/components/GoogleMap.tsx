@@ -94,11 +94,26 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
     initMap();
   }, []);
 
-  // Get Google Maps API key from Supabase secrets
+  // Get Google Maps API key from Supabase Edge Function
   const getGoogleMapsApiKey = async (): Promise<string> => {
-    // In production, this would be fetched from Supabase Edge Function
-    // For now, return a placeholder - user will need to replace with actual key
-    return 'YOUR_GOOGLE_MAPS_API_KEY';
+    try {
+      const { data, error } = await supabase.functions.invoke('get-google-maps-key');
+      
+      if (error) {
+        console.error('Error fetching Google Maps API key:', error);
+        throw new Error('Failed to fetch API key');
+      }
+      
+      return data.apiKey;
+    } catch (error) {
+      console.error('Error fetching Google Maps API key:', error);
+      toast({
+        title: "Map Configuration Error",
+        description: "Unable to load Google Maps. Please check your API key configuration.",
+        variant: "destructive",
+      });
+      throw error;
+    }
   };
 
   // Get user location
