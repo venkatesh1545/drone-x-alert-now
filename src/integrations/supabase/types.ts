@@ -226,6 +226,11 @@ export type Database = {
           priority: number | null
           relationship: string | null
           user_id: string
+          verification_code: string | null
+          verification_expires_at: string | null
+          verification_status: string | null
+          verification_type: string | null
+          verified_at: string | null
         }
         Insert: {
           created_at?: string
@@ -238,6 +243,11 @@ export type Database = {
           priority?: number | null
           relationship?: string | null
           user_id: string
+          verification_code?: string | null
+          verification_expires_at?: string | null
+          verification_status?: string | null
+          verification_type?: string | null
+          verified_at?: string | null
         }
         Update: {
           created_at?: string
@@ -250,6 +260,11 @@ export type Database = {
           priority?: number | null
           relationship?: string | null
           user_id?: string
+          verification_code?: string | null
+          verification_expires_at?: string | null
+          verification_status?: string | null
+          verification_type?: string | null
+          verified_at?: string | null
         }
         Relationships: []
       }
@@ -289,6 +304,137 @@ export type Database = {
           status?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      group_chat_members: {
+        Row: {
+          emergency_contact_id: string | null
+          group_id: string
+          id: string
+          is_active: boolean | null
+          joined_at: string
+          user_id: string
+        }
+        Insert: {
+          emergency_contact_id?: string | null
+          group_id: string
+          id?: string
+          is_active?: boolean | null
+          joined_at?: string
+          user_id: string
+        }
+        Update: {
+          emergency_contact_id?: string | null
+          group_id?: string
+          id?: string
+          is_active?: boolean | null
+          joined_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_chat_members_emergency_contact_id_fkey"
+            columns: ["emergency_contact_id"]
+            isOneToOne: false
+            referencedRelation: "emergency_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_chat_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "group_chats"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_chat_messages: {
+        Row: {
+          content: string | null
+          created_at: string
+          file_name: string | null
+          file_size: number | null
+          file_url: string | null
+          group_id: string
+          id: string
+          location_duration_hours: number | null
+          location_expires_at: string | null
+          location_latitude: number | null
+          location_longitude: number | null
+          message_type: string | null
+          sender_id: string
+          updated_at: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          file_name?: string | null
+          file_size?: number | null
+          file_url?: string | null
+          group_id: string
+          id?: string
+          location_duration_hours?: number | null
+          location_expires_at?: string | null
+          location_latitude?: number | null
+          location_longitude?: number | null
+          message_type?: string | null
+          sender_id: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          file_name?: string | null
+          file_size?: number | null
+          file_url?: string | null
+          group_id?: string
+          id?: string
+          location_duration_hours?: number | null
+          location_expires_at?: string | null
+          location_latitude?: number | null
+          location_longitude?: number | null
+          message_type?: string | null
+          sender_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_chat_messages_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "group_chats"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_chats: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          owner_id?: string
+          updated_at?: string
         }
         Relationships: []
       }
