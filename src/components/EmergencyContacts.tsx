@@ -1,15 +1,17 @@
-
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { Phone, Mail, Plus, Trash2, User, Save, Edit, Heart, List, Network } from "lucide-react";
-import { EmergencyContactsGraph } from "./EmergencyContactsGraph";
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/components/ui/use-toast';
+import { Users, Plus, Edit, Trash2, Network, Phone, Mail, User, Save, List, Heart, Check, Clock, X } from 'lucide-react';
+import { EmergencyContactsGraph } from './EmergencyContactsGraph';
+import EmergencyContactVerification from './EmergencyContactVerification';
+import EmergencyGroupChat from './EmergencyGroupChat';
 
 interface EmergencyContact {
   id?: string;
@@ -17,7 +19,10 @@ interface EmergencyContact {
   phone: string;
   email?: string;
   relationship?: string;
-  priority: number;
+  priority?: number;
+  verification_status?: 'pending' | 'verified' | 'failed';
+  verification_type?: 'email' | 'sms';
+  verified_at?: string;
 }
 
 interface EmergencyContactsProps {
@@ -28,7 +33,6 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
   const [editingContact, setEditingContact] = useState<EmergencyContact | null>(null);
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
   const { toast } = useToast();
 
   useEffect(() => {
@@ -48,7 +52,7 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
           .order('priority');
 
         if (error) throw error;
-        setContacts(data || []);
+        setContacts((data || []) as EmergencyContact[]);
       }
     } catch (error) {
       console.error('Error fetching contacts:', error);
@@ -62,23 +66,25 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
     }
   };
 
-  const saveContact = async (contact: EmergencyContact) => {
+  const saveContact = async () => {
+    if (!editingContact) return;
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      if (contact.id) {
+      if (editingContact.id) {
         // Update existing contact
         const { error } = await supabase
           .from('emergency_contacts')
           .update({
-            name: contact.name,
-            phone: contact.phone,
-            email: contact.email,
-            relationship: contact.relationship,
-            priority: contact.priority,
+            name: editingContact.name,
+            phone: editingContact.phone,
+            email: editingContact.email,
+            relationship: editingContact.relationship,
+            priority: editingContact.priority,
           })
-          .eq('id', contact.id);
+          .eq('id', editingContact.id);
 
         if (error) throw error;
       } else {
@@ -87,11 +93,11 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
           .from('emergency_contacts')
           .insert({
             user_id: user.id,
-            name: contact.name,
-            phone: contact.phone,
-            email: contact.email,
-            relationship: contact.relationship,
-            priority: contact.priority,
+            name: editingContact.name,
+            phone: editingContact.phone,
+            email: editingContact.email,
+            relationship: editingContact.relationship,
+            priority: editingContact.priority,
           });
 
         if (error) throw error;
@@ -142,7 +148,7 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
       setEditingContact(contact);
     } else {
       // Find next available priority
-      const usedPriorities = contacts.map(c => c.priority);
+      const usedPriorities = contacts.map(c => c.priority || 1);
       const nextPriority = [1, 2, 3, 4, 5].find(p => !usedPriorities.includes(p)) || 1;
       
       setEditingContact({
@@ -155,278 +161,302 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
     }
   };
 
-  const relationships = [
-    'Family',
-    'Spouse',
-    'Parent',
-    'Child',
-    'Sibling',
-    'Friend',
-    'Colleague',
-    'Neighbor',
-    'Doctor',
-    'Other'
-  ];
-
-  const getPriorityLabel = (priority: number) => {
+  const getPriorityLabel = (priority?: number) => {
+    if (!priority) return 'No Priority';
     const labels = {
       1: 'Primary',
-      2: 'Secondary',
+      2: 'Secondary', 
       3: 'Tertiary',
-      4: 'Backup',
-      5: 'Emergency'
+      4: 'Backup'
     };
     return labels[priority as keyof typeof labels] || `Priority ${priority}`;
   };
 
-  const getPriorityColor = (priority: number) => {
+  const getPriorityColor = (priority?: number) => {
+    if (!priority) return 'bg-secondary text-secondary-foreground';
     const colors = {
-      1: 'bg-red-100 text-red-700',
-      2: 'bg-orange-100 text-orange-700',
-      3: 'bg-yellow-100 text-yellow-700',
-      4: 'bg-blue-100 text-blue-700',
-      5: 'bg-green-100 text-green-700'
+      1: 'bg-destructive text-destructive-foreground',
+      2: 'bg-primary text-primary-foreground',
+      3: 'bg-secondary text-secondary-foreground',
+      4: 'bg-muted text-muted-foreground'
     };
-    return colors[priority as keyof typeof colors] || 'bg-gray-100 text-gray-700';
+    return colors[priority as keyof typeof colors] || 'bg-secondary text-secondary-foreground';
   };
 
   if (readOnly) {
     return (
-      <div className="space-y-3">
-        {contacts.length === 0 ? (
-          <div className="text-center py-6 text-gray-500">
-            <Phone className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>No emergency contacts added yet</p>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Users className="h-5 w-5 mr-2 text-primary" />
+            Emergency Contacts
+          </CardTitle>
+          <CardDescription>
+            Your configured emergency contacts
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {contacts.map((contact) => (
+              <div key={contact.id} className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <h4 className="font-medium">{contact.name}</h4>
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <span>{contact.phone}</span>
+                    {contact.email && <span>{contact.email}</span>}
+                    {contact.relationship && (
+                      <Badge variant="outline">{contact.relationship}</Badge>
+                    )}
+                    {contact.priority && (
+                      <Badge variant="secondary">
+                        {getPriorityLabel(contact.priority)}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {contacts.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>No emergency contacts configured</p>
+              </div>
+            )}
           </div>
-        ) : (
-          contacts.slice(0, 5).map((contact) => (
-            <div key={contact.id} className="flex items-center space-x-3 p-3 bg-sky-50 rounded-lg">
-              <div className="flex-shrink-0">
-                <Badge className={getPriorityColor(contact.priority)}>
-                  {contact.priority}
-                </Badge>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-gray-900 truncate">{contact.name}</p>
-                <p className="text-sm text-gray-500 truncate">{contact.phone}</p>
-                {contact.relationship && (
-                  <p className="text-xs text-gray-400">{contact.relationship}</p>
-                )}
-              </div>
-              <div className="flex space-x-1">
-                <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
-                  <Phone className="h-3 w-3" />
-                </Button>
-                {contact.email && (
-                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
-                    <Mail className="h-3 w-3" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-4">
-      {/* Add/Edit Contact Form */}
-      {editingContact && (
-        <Card className="border-sky-200">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center">
-              <User className="h-5 w-5 mr-2 text-sky-500" />
-              {editingContact.id ? 'Edit Contact' : 'Add Emergency Contact'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  value={editingContact.name}
-                  onChange={(e) => setEditingContact({...editingContact, name: e.target.value})}
-                  placeholder="Full name"
-                  required
-                />
-              </div>
+    <div className="space-y-6">
+      <Tabs defaultValue="contacts" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="contacts">Contacts</TabsTrigger>
+          <TabsTrigger value="verification">Verification</TabsTrigger>
+          <TabsTrigger value="chat">Group Chat</TabsTrigger>
+          <TabsTrigger value="graph">Network</TabsTrigger>
+        </TabsList>
 
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone *</Label>
-                <Input
-                  id="phone"
-                  value={editingContact.phone}
-                  onChange={(e) => setEditingContact({...editingContact, phone: e.target.value})}
-                  placeholder="Phone number"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={editingContact.email || ''}
-                  onChange={(e) => setEditingContact({...editingContact, email: e.target.value})}
-                  placeholder="Email address"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="relationship">Relationship</Label>
-                <Select 
-                  value={editingContact.relationship || ''} 
-                  onValueChange={(value) => setEditingContact({...editingContact, relationship: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select relationship" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {relationships.map((rel) => (
-                      <SelectItem key={rel} value={rel}>
-                        {rel}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="priority">Priority</Label>
-                <Select 
-                  value={editingContact.priority.toString()} 
-                  onValueChange={(value) => setEditingContact({...editingContact, priority: parseInt(value)})}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3, 4, 5].map((priority) => (
-                      <SelectItem 
-                        key={priority} 
-                        value={priority.toString()}
-                        disabled={contacts.some(c => c.priority === priority && c.id !== editingContact.id)}
+        <TabsContent value="contacts" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Users className="h-5 w-5 mr-2 text-primary" />
+                  Emergency Contacts
+                </div>
+                <Button onClick={() => startEditing()}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Contact
+                </Button>
+              </CardTitle>
+              <CardDescription>
+                Manage your emergency contacts and their verification status
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {editingContact !== null && (
+                <Card className="mb-6">
+                  <CardHeader>
+                    <CardTitle>
+                      {Object.keys(editingContact).length === 0 ? 'Add New Contact' : 'Edit Contact'}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="name">Name *</Label>
+                        <Input
+                          id="name"
+                          value={editingContact.name || ''}
+                          onChange={(e) => setEditingContact({ ...editingContact, name: e.target.value })}
+                          placeholder="Contact name"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="phone">Phone *</Label>
+                        <Input
+                          id="phone"
+                          value={editingContact.phone || ''}
+                          onChange={(e) => setEditingContact({ ...editingContact, phone: e.target.value })}
+                          placeholder="Phone number"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={editingContact.email || ''}
+                          onChange={(e) => setEditingContact({ ...editingContact, email: e.target.value })}
+                          placeholder="Email address"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="relationship">Relationship</Label>
+                        <Select
+                          value={editingContact.relationship || ''}
+                          onValueChange={(value) => setEditingContact({ ...editingContact, relationship: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select relationship" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="parent">Parent</SelectItem>
+                            <SelectItem value="spouse">Spouse</SelectItem>
+                            <SelectItem value="sibling">Sibling</SelectItem>
+                            <SelectItem value="child">Child</SelectItem>
+                            <SelectItem value="friend">Friend</SelectItem>
+                            <SelectItem value="colleague">Colleague</SelectItem>
+                            <SelectItem value="neighbor">Neighbor</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="priority">Priority</Label>
+                        <Select
+                          value={editingContact.priority?.toString() || ''}
+                          onValueChange={(value) => setEditingContact({ ...editingContact, priority: parseInt(value) })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select priority" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1">1 - Highest</SelectItem>
+                            <SelectItem value="2">2 - High</SelectItem>
+                            <SelectItem value="3">3 - Medium</SelectItem>
+                            <SelectItem value="4">4 - Low</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                      <Button
+                        onClick={saveContact}
+                        disabled={loading || !editingContact.name || !editingContact.phone}
                       >
-                        {getPriorityLabel(priority)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+                        {loading ? 'Saving...' : Object.keys(editingContact).length === 0 ? 'Add Contact' : 'Update Contact'}
+                      </Button>
+                      <Button variant="outline" onClick={() => setEditingContact(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
-            <div className="flex space-x-3">
-              <Button 
-                onClick={() => saveContact(editingContact)}
-                disabled={!editingContact.name || !editingContact.phone}
-                className="bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700"
-              >
-                <Save className="h-4 w-4 mr-2" />
-                Save Contact
-              </Button>
-              <Button variant="outline" onClick={() => setEditingContact(null)}>
-                Cancel
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Contact List/Graph */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h4 className="font-medium text-gray-900">Emergency Contacts ({contacts.length}/5)</h4>
-          <div className="flex items-center space-x-2">
-            {/* View Toggle */}
-            <div className="flex bg-gray-100 rounded-lg p-1">
-              <Button
-                size="sm"
-                variant={viewMode === 'list' ? 'default' : 'ghost'}
-                onClick={() => setViewMode('list')}
-                className={`h-8 px-3 ${viewMode === 'list' ? 'bg-white shadow-sm' : ''}`}
-              >
-                <List className="h-4 w-4 mr-1" />
-                List
-              </Button>
-              <Button
-                size="sm"
-                variant={viewMode === 'graph' ? 'default' : 'ghost'}
-                onClick={() => setViewMode('graph')}
-                className={`h-8 px-3 ${viewMode === 'graph' ? 'bg-white shadow-sm' : ''}`}
-              >
-                <Network className="h-4 w-4 mr-1" />
-                Graph
-              </Button>
-            </div>
-            
-            {!editingContact && contacts.length < 5 && (
-              <Button 
-                size="sm" 
-                onClick={() => startEditing()}
-                className="bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Add Contact
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {contacts.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <Heart className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p className="text-lg font-medium mb-1">No emergency contacts yet</p>
-            <p className="text-sm">Add up to 5 emergency contacts for immediate notifications</p>
-          </div>
-        ) : viewMode === 'graph' ? (
-          <EmergencyContactsGraph contacts={contacts} />
-        ) : (
-          contacts.map((contact) => (
-            <Card key={contact.id} className="border-sky-100">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <Badge className={getPriorityColor(contact.priority)}>
-                      {contact.priority}
-                    </Badge>
-                    <div>
-                      <p className="font-medium text-gray-900">{contact.name}</p>
-                      <p className="text-sm text-gray-600">{contact.phone}</p>
-                      {contact.email && (
-                        <p className="text-sm text-gray-500">{contact.email}</p>
-                      )}
-                      {contact.relationship && (
-                        <p className="text-xs text-gray-400">{contact.relationship}</p>
+              <div className="space-y-4">
+                {contacts.map((contact) => (
+                  <div key={contact.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h4 className="font-medium">{contact.name}</h4>
+                        {contact.verification_status === 'verified' && (
+                          <Badge variant="default" className="bg-success text-success-foreground">
+                            <Check className="w-3 h-3 mr-1" />
+                            Verified
+                          </Badge>
+                        )}
+                        {contact.verification_status === 'pending' && (
+                          <Badge variant="secondary">
+                            <Clock className="w-3 h-3 mr-1" />
+                            Pending
+                          </Badge>
+                        )}
+                        {(!contact.verification_status || contact.verification_status === 'failed') && (
+                          <Badge variant="outline">
+                            <X className="w-3 h-3 mr-1" />
+                            Unverified
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <span>{contact.phone}</span>
+                        {contact.email && <span>{contact.email}</span>}
+                        {contact.relationship && (
+                          <Badge variant="outline">{contact.relationship}</Badge>
+                        )}
+                        {contact.priority && (
+                          <Badge variant="secondary" className={getPriorityColor(contact.priority)}>
+                            {getPriorityLabel(contact.priority)}
+                          </Badge>
+                        )}
+                      </div>
+                      {contact.verified_at && (
+                        <div className="text-xs text-success mt-1">
+                          Verified on {new Date(contact.verified_at).toLocaleDateString()}
+                        </div>
                       )}
                     </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => startEditing(contact)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => deleteContact(contact.id!)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex space-x-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => startEditing(contact)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => contact.id && deleteContact(contact.id)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                ))}
+
+                {contacts.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>No emergency contacts added yet</p>
+                    <p className="text-sm">Add your first contact to get started</p>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="verification">
+          <EmergencyContactVerification
+            contacts={contacts as any}
+            onVerificationUpdate={fetchContacts}
+          />
+        </TabsContent>
+
+        <TabsContent value="chat">
+          <EmergencyGroupChat
+            onMemberRemoved={(contactId) => {
+              // Mark contact as removed from group chat
+              fetchContacts();
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="graph">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Network className="h-5 w-5 mr-2 text-primary" />
+                Emergency Network Graph
+              </CardTitle>
+              <CardDescription>
+                Visual representation of your emergency contact network
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <EmergencyContactsGraph contacts={contacts as any} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
+
+export default EmergencyContacts;
