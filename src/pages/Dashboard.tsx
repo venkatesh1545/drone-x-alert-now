@@ -276,7 +276,7 @@ const Dashboard = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <GoogleMap fullSize={true} showEmergencies={true} showSharedLocations={true} />
+                <GoogleMap fullSize={true} />
               </CardContent>
             </Card>
           </TabsContent>
