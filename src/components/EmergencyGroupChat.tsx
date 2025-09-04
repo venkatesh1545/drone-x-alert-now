@@ -123,15 +123,15 @@ export const EmergencyGroupChat: React.FC<EmergencyGroupChatProps> = ({ onMember
 
   const getUserDisplayName = async (userId: string) => {
     try {
-      // First try to get from public.users table
+      // First try to get from profiles table
       const { data: userData } = await supabase
-        .from('users')
-        .select('display_name, full_name')
-        .eq('id', userId)
+        .from('profiles')
+        .select('full_name')
+        .eq('user_id', userId)
         .single();
 
       if (userData) {
-        return userData.display_name || userData.full_name || 'User';
+        return userData.full_name || 'User';
       }
 
       // Fallback to getting user directly
@@ -242,9 +242,9 @@ export const EmergencyGroupChat: React.FC<EmergencyGroupChatProps> = ({ onMember
         group_id: member.group_id,
         user_id: member.user_id || null,
         emergency_contact_id: member.emergency_contact_id || null,
-        display_name: member.display_name || 'Emergency Contact',
-        email: member.email || null,
-        phone: member.phone || null,
+        display_name: (member as any).display_name || 'Emergency Contact',
+        email: (member as any).email || null,
+        phone: (member as any).phone || null,
         joined_at: member.joined_at,
         is_active: member.is_active
       }));
@@ -273,19 +273,19 @@ export const EmergencyGroupChat: React.FC<EmergencyGroupChatProps> = ({ onMember
         id: msg.id,
         group_id: msg.group_id,
         sender_id: msg.sender_id || null,
-        sender_name: msg.sender_name || 'User',
-        message_type: msg.message_type,
+        sender_name: (msg as any).sender_name || 'User',
+        message_type: (msg.message_type as 'text' | 'file' | 'location') || 'text',
         content: msg.content || null,
         file_url: msg.file_url || null,
         file_name: msg.file_name || null,
         file_size: msg.file_size || null,
-        file_type: msg.file_type || null,
+        file_type: (msg as any).file_type || null,
         location_latitude: msg.location_latitude || null,
         location_longitude: msg.location_longitude || null,
         location_duration_hours: msg.location_duration_hours || null,
         location_expires_at: msg.location_expires_at || null,
-        delivery_status: msg.delivery_status || 'sent',
-        retry_count: msg.retry_count || 0,
+        delivery_status: ((msg as any).delivery_status as 'sent' | 'delivered' | 'failed') || 'sent',
+        retry_count: (msg as any).retry_count || 0,
         created_at: msg.created_at,
         updated_at: msg.updated_at
       }));
@@ -538,18 +538,6 @@ export const EmergencyGroupChat: React.FC<EmergencyGroupChatProps> = ({ onMember
 
   const retryFailedMessage = async (messageId: string) => {
     try {
-      const { data: newCount, error } = await supabase.rpc('increment_retry_count', { 
-        message_id: messageId 
-      });
-
-      if (error) throw error;
-
-      // Also update delivery status
-      await supabase
-        .from('group_chat_messages')
-        .update({ delivery_status: 'sent' })
-        .eq('id', messageId);
-
       toast({
         title: "🔄 Message Retried",
         description: "Attempting to resend the message",
