@@ -187,30 +187,51 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center">
-            <Users className="h-5 w-5 mr-2 text-primary" />
-            Emergency Contacts
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center">
+              <Users className="h-5 w-5 mr-2 text-primary" />
+              Emergency Contacts
+            </div>
+            <span className="text-sm text-muted-foreground">Your configured emergency contacts</span>
           </CardTitle>
-          <CardDescription>
-            Your configured emergency contacts
-          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
+          <div className="space-y-3">
             {contacts.map((contact) => (
-              <div key={contact.id} className="flex items-center justify-between p-4 border rounded-lg">
-                <div>
-                  <h4 className="font-medium">{contact.name}</h4>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <span>{contact.phone}</span>
-                    {contact.email && <span>{contact.email}</span>}
+              <div key={contact.id} className="flex items-center justify-between p-3 border rounded-lg bg-card">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <h4 className="font-medium text-sm truncate">{contact.name}</h4>
+                    {contact.verification_status === 'verified' && (
+                      <Badge variant="default" className="bg-green-100 text-green-800 text-xs whitespace-nowrap">
+                        <Check className="w-3 h-3 mr-1" />
+                        Verified
+                      </Badge>
+                    )}
                     {contact.relationship && (
-                      <Badge variant="outline">{contact.relationship}</Badge>
+                      <Badge variant="outline" className="text-xs whitespace-nowrap">
+                        {contact.relationship}
+                      </Badge>
                     )}
                     {contact.priority && (
-                      <Badge variant="secondary">
+                      <Badge 
+                        variant="secondary" 
+                        className={`text-xs whitespace-nowrap ${getPriorityColor(contact.priority)}`}
+                      >
                         {getPriorityLabel(contact.priority)}
                       </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                    <span className="flex items-center gap-1">
+                      <Phone className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">{contact.phone}</span>
+                    </span>
+                    {contact.email && (
+                      <span className="flex items-center gap-1">
+                        <Mail className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">{contact.email}</span>
+                      </span>
                     )}
                   </div>
                 </div>
@@ -260,11 +281,11 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
                 <Card className="mb-6">
                   <CardHeader>
                     <CardTitle>
-                      {Object.keys(editingContact).length === 0 ? 'Add New Contact' : 'Edit Contact'}
+                      {editingContact.id ? 'Edit Contact' : 'Add New Contact'}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <Label htmlFor="name">Name *</Label>
                         <Input
@@ -337,7 +358,7 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
                         onClick={saveContact}
                         disabled={loading || !editingContact.name || !editingContact.phone}
                       >
-                        {loading ? 'Saving...' : Object.keys(editingContact).length === 0 ? 'Add Contact' : 'Update Contact'}
+                        {loading ? 'Saving...' : editingContact.id ? 'Update Contact' : 'Add Contact'}
                       </Button>
                       <Button variant="outline" onClick={() => setEditingContact(null)}>
                         Cancel
@@ -349,52 +370,71 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
 
               <div className="space-y-4">
                 {contacts.map((contact) => (
-                  <div key={contact.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h4 className="font-medium">{contact.name}</h4>
+                  <div key={contact.id} className="flex items-start justify-between p-4 border rounded-lg bg-card">
+                    {/* Content Section - Fixed width and spacing */}
+                    <div className="flex-1 min-w-0 mr-4">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <h4 className="font-medium truncate">{contact.name}</h4>
                         {contact.verification_status === 'verified' && (
-                          <Badge variant="default" className="bg-success text-success-foreground">
+                          <Badge variant="default" className="bg-green-100 text-green-800 text-xs whitespace-nowrap">
                             <Check className="w-3 h-3 mr-1" />
                             Verified
                           </Badge>
                         )}
                         {contact.verification_status === 'pending' && (
-                          <Badge variant="secondary">
+                          <Badge variant="secondary" className="text-xs whitespace-nowrap">
                             <Clock className="w-3 h-3 mr-1" />
                             Pending
                           </Badge>
                         )}
                         {(!contact.verification_status || contact.verification_status === 'failed') && (
-                          <Badge variant="outline">
+                          <Badge variant="outline" className="text-xs whitespace-nowrap">
                             <X className="w-3 h-3 mr-1" />
                             Unverified
                           </Badge>
                         )}
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>{contact.phone}</span>
-                        {contact.email && <span>{contact.email}</span>}
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2 flex-wrap">
+                        <span className="flex items-center gap-1">
+                          <Phone className="w-3 h-3 flex-shrink-0" />
+                          <span className="truncate">{contact.phone}</span>
+                        </span>
+                        {contact.email && (
+                          <span className="flex items-center gap-1">
+                            <Mail className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{contact.email}</span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
                         {contact.relationship && (
-                          <Badge variant="outline">{contact.relationship}</Badge>
+                          <Badge variant="outline" className="text-xs whitespace-nowrap">
+                            {contact.relationship}
+                          </Badge>
                         )}
                         {contact.priority && (
-                          <Badge variant="secondary" className={getPriorityColor(contact.priority)}>
+                          <Badge 
+                            variant="secondary" 
+                            className={`text-xs whitespace-nowrap ${getPriorityColor(contact.priority)}`}
+                          >
                             {getPriorityLabel(contact.priority)}
                           </Badge>
                         )}
                       </div>
                       {contact.verified_at && (
-                        <div className="text-xs text-success mt-1">
+                        <div className="text-xs text-green-600 mt-1">
                           Verified on {new Date(contact.verified_at).toLocaleDateString()}
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    
+                    {/* Action Buttons - Fixed alignment */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => startEditing(contact)}
+                        className="h-9 w-9 p-0"
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -402,7 +442,7 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
                         size="sm"
                         variant="outline"
                         onClick={() => deleteContact(contact.id!)}
-                        className="text-destructive hover:text-destructive"
+                        className="text-destructive hover:text-destructive h-9 w-9 p-0"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
