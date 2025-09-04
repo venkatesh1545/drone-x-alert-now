@@ -309,28 +309,37 @@ export type Database = {
       }
       group_chat_members: {
         Row: {
+          display_name: string
+          email: string | null
           emergency_contact_id: string | null
           group_id: string
           id: string
           is_active: boolean | null
           joined_at: string
-          user_id: string
+          phone: string | null
+          user_id: string | null
         }
         Insert: {
+          display_name?: string
+          email?: string | null
           emergency_contact_id?: string | null
           group_id: string
           id?: string
           is_active?: boolean | null
           joined_at?: string
-          user_id: string
+          phone?: string | null
+          user_id?: string | null
         }
         Update: {
+          display_name?: string
+          email?: string | null
           emergency_contact_id?: string | null
           group_id?: string
           id?: string
           is_active?: boolean | null
           joined_at?: string
-          user_id?: string
+          phone?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -353,8 +362,10 @@ export type Database = {
         Row: {
           content: string | null
           created_at: string
+          delivery_status: string | null
           file_name: string | null
           file_size: number | null
+          file_type: string | null
           file_url: string | null
           group_id: string
           id: string
@@ -363,14 +374,18 @@ export type Database = {
           location_latitude: number | null
           location_longitude: number | null
           message_type: string | null
+          retry_count: number | null
           sender_id: string
+          sender_name: string
           updated_at: string
         }
         Insert: {
           content?: string | null
           created_at?: string
+          delivery_status?: string | null
           file_name?: string | null
           file_size?: number | null
+          file_type?: string | null
           file_url?: string | null
           group_id: string
           id?: string
@@ -379,14 +394,18 @@ export type Database = {
           location_latitude?: number | null
           location_longitude?: number | null
           message_type?: string | null
+          retry_count?: number | null
           sender_id: string
+          sender_name?: string
           updated_at?: string
         }
         Update: {
           content?: string | null
           created_at?: string
+          delivery_status?: string | null
           file_name?: string | null
           file_size?: number | null
+          file_type?: string | null
           file_url?: string | null
           group_id?: string
           id?: string
@@ -395,7 +414,9 @@ export type Database = {
           location_latitude?: number | null
           location_longitude?: number | null
           message_type?: string | null
+          retry_count?: number | null
           sender_id?: string
+          sender_name?: string
           updated_at?: string
         }
         Relationships: [
@@ -744,6 +765,10 @@ export type Database = {
       has_role: {
         Args: { check_user_id: string; role_name: string }
         Returns: boolean
+      }
+      increment_retry_count: {
+        Args: { message_id: string }
+        Returns: number
       }
       is_admin: {
         Args: { user_id?: string }

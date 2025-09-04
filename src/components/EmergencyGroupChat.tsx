@@ -128,7 +128,7 @@ export const EmergencyGroupChat: React.FC<EmergencyGroupChatProps> = ({ onMember
         .from('profiles')
         .select('full_name')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (userData) {
         return userData.full_name || 'User';
