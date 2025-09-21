@@ -216,9 +216,10 @@ export const EmergencyGroupChat: React.FC<EmergencyGroupChatProps> = ({ onMember
       }
     } catch (error) {
       console.error('Error initializing group chat:', error);
+      const message = (error as any)?.message || (typeof error === 'string' ? error : 'Failed to load group chat');
       toast({
         title: "Error",
-        description: "Failed to load group chat",
+        description: `Failed to load group chat: ${message}`,
         variant: "destructive",
       });
     } finally {
