@@ -1,62 +1,100 @@
-// @deno-types="https://deno.land/std@0.168.0/http/server.d.ts"
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-// Import Deno namespace for TypeScript type checking
-/// <reference lib="deno.ns" />
+// @deno-types="https://deno.land/std@0.190.0/http/server.ts"
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { Resend } from "npm:resend@4.0.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const resend = new Resend(Deno.env.get('RESEND_API_KEY') as string);
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+async function findUserByEmail(adminClient: any, email: string) {
+  try {
+    let page = 1;
+    const perPage = 200;
+    while (true) {
+      const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage });
+      if (error) throw error;
+      const found = data.users.find((u: any) => (u.email || '').toLowerCase() === email.toLowerCase());
+      if (found) return found;
+      if (page >= (data.lastPage || page)) break;
+      page++;
+    }
+    return null;
+  } catch (e) {
+    console.error('findUserByEmail error:', e);
+    return null;
+  }
+}
 
 serve(async (req) => {
-  try {
-    const { to, name, verificationCode } = await req.json()
-
-    // Log for debugging
-    console.log(`Sending verification code ${verificationCode} to ${to}`)
-
-    const emailData = {
-      service_id: Deno.env.get('EMAILJS_SERVICE_ID'),
-      template_id: Deno.env.get('EMAILJS_TEMPLATE_ID'),
-      user_id: Deno.env.get('EMAILJS_PUBLIC_KEY'),
-      template_params: {
-        to_email: to,
-        to_name: name,
-        verification_code: verificationCode,
-        subject: '🚁 DroneX Emergency Contact Verification'
-      }
-    }
-
-    const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(emailData)
-    })
-
-    if (response.ok) {
-      const result = await response.text()
-      console.log('Email sent successfully:', result)
-      
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'Verification email sent successfully',
-          emailSent: true
-        }),
-        { headers: { "Content-Type": "application/json" } }
-      )
-    } else {
-      const errorText = await response.text()
-      console.error('EmailJS error:', errorText)
-      throw new Error(`EmailJS API error: ${response.status} - ${errorText}`)
-    }
-
-  } catch (error) {
-    console.error('Email sending error:', error)
-    return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error.message,
-        emailSent: false
-      }),
-      { headers: { "Content-Type": "application/json" }, status: 500 }
-    )
+  // Handle CORS preflight requests
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
   }
-})
+
+  try {
+    const { to, name, verificationCode } = await req.json();
+
+    if (!to || !verificationCode) {
+      return new Response(JSON.stringify({ success: false, error: 'Missing to or verificationCode' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // Admin client to check if an account already exists for the recipient email
+    const admin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+
+    const existingUser = await findUserByEmail(admin, to);
+    const accountExists = !!existingUser;
+
+    const subject = accountExists
+      ? 'DroneX Contact Verification Code'
+      : 'Create your DroneX account to verify (includes OTP)';
+
+    const html = `
+      <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial; line-height: 1.6; color: #111;">
+        <h2 style="margin: 0 0 12px;">Hello${name ? ` ${name}` : ''},</h2>
+        ${accountExists
+          ? `<p>Use the One-Time Password (OTP) below to verify your emergency contact link:</p>`
+          : `<p>To join the emergency group chat, please create your account first using this email address, then use the OTP below to verify your contact link.</p>`
+        }
+        <div style="margin: 16px 0; padding: 16px; background: #f7f7f8; border-radius: 8px; border: 1px solid #eee; text-align: center;">
+          <div style="font-size: 12px; color: #666; letter-spacing: 0.08em; text-transform: uppercase;">Your verification code</div>
+          <div style="font-size: 28px; font-weight: 700; letter-spacing: 0.2em; margin-top: 6px;">${verificationCode}</div>
+        </div>
+        ${accountExists
+          ? ''
+          : `<p style="margin: 12px 0 0;">After creating your account, return to the app and enter the code to complete verification.</p>`
+        }
+        <p style="font-size: 12px; color: #666;">This code expires in 30 minutes. If you didn’t request this, you can ignore this message.</p>
+        <p style="margin-top: 16px; color: #444;">— DroneX Team</p>
+      </div>
+    `;
+
+    const { data: sendData, error: sendError } = await resend.emails.send({
+      from: 'DroneX <onboarding@resend.dev>',
+      to: [to],
+      subject,
+      html,
+    });
+
+    if (sendError) {
+      throw sendError;
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, message: 'Verification email sent successfully', emailSent: true, emailId: sendData?.id, accountExists }),
+      { headers: { "Content-Type": "application/json", ...corsHeaders } }
+    );
+  } catch (error: any) {
+    console.error('Email sending error:', error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message, emailSent: false }),
+      { headers: { "Content-Type": "application/json", ...corsHeaders }, status: 500 }
+    );
+  }
+});

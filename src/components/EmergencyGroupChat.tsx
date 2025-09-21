@@ -167,49 +167,50 @@ export const EmergencyGroupChat: React.FC<EmergencyGroupChatProps> = ({ onMember
 
       if (!chats || chats.length === 0) {
         // Check if user has verified emergency contacts
-        const { data: contacts, error: contactsError } = await supabase
-          .from('emergency_contacts')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('verification_status', 'verified');
+          const { data: contacts, error: contactsError } = await supabase
+            .from('emergency_contacts')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('verification_status', 'verified')
+            .not('contact_user_id', 'is', null);
 
-        if (contactsError) throw contactsError;
+          if (contactsError) throw contactsError;
 
-        if (contacts && contacts.length > 0) {
-          // Create group chat automatically
-          const { data: newChat, error: createError } = await supabase
-            .from('group_chats')
-            .insert({
-              owner_id: user.id,
-              name: 'Emergency Network',
-              description: 'Your emergency contact group chat'
-            })
-            .select()
-            .single();
+          if (contacts && contacts.length > 0) {
+            // Create group chat automatically
+            const { data: newChat, error: createError } = await supabase
+              .from('group_chats')
+              .insert({
+                owner_id: user.id,
+                name: 'Emergency Network',
+                description: 'Your emergency contact group chat'
+              })
+              .select()
+              .single();
 
-          if (createError) throw createError;
-          setGroupChat(newChat);
+            if (createError) throw createError;
+            setGroupChat(newChat);
 
-          // Add verified contacts to the group
-          const membersToAdd = contacts.map(contact => ({
-            group_id: newChat.id,
-            emergency_contact_id: contact.id,
-            user_id: null, // Emergency contacts don't have user_id
-            display_name: contact.name || 'Emergency Contact',
-            email: contact.email,
-            phone: contact.phone
-          }));
+            // Add only verified contacts with accounts linked
+            const membersToAdd = (contacts as any[]).map((contact) => ({
+              group_id: newChat.id,
+              emergency_contact_id: contact.id,
+              user_id: contact.contact_user_id, // link to real user account
+              display_name: contact.name || 'Emergency Contact',
+              email: contact.email,
+              phone: contact.phone
+            }));
 
-          const { error: membersError } = await supabase
-            .from('group_chat_members')
-            .insert(membersToAdd);
+            const { error: membersError } = await supabase
+              .from('group_chat_members')
+              .insert(membersToAdd);
 
-          if (membersError) {
-            console.error('Error adding members:', membersError);
-          } else {
-            console.log('Successfully added members to group chat');
+            if (membersError) {
+              console.error('Error adding members:', membersError);
+            } else {
+              console.log('Successfully added members to group chat');
+            }
           }
-        }
       } else {
         setGroupChat(chats[0]);
       }

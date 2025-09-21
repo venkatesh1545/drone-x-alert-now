@@ -261,6 +261,7 @@ export type Database = {
       }
       emergency_contacts: {
         Row: {
+          contact_user_id: string | null
           created_at: string
           email: string | null
           id: string
@@ -278,6 +279,7 @@ export type Database = {
           verified_at: string | null
         }
         Insert: {
+          contact_user_id?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -295,6 +297,7 @@ export type Database = {
           verified_at?: string | null
         }
         Update: {
+          contact_user_id?: string | null
           created_at?: string
           email?: string | null
           id?: string

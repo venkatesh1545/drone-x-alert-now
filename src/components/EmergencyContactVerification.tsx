@@ -199,6 +199,30 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
 
       if (error) throw error;
 
+      // Attempt to link this contact to an existing DroneX account by email (if any)
+      if (contact.email) {
+        try {
+          const { data: linkData, error: linkError } = await supabase.functions.invoke('link-contact-account', {
+            body: { contactId, email: contact.email }
+          });
+          if (linkError) {
+            console.warn('Link contact error:', linkError);
+          } else if (linkData && linkData.accountExists) {
+            toast({
+              title: '🔗 Account Linked',
+              description: `${contact.name} has a DroneX account and is now linked to the group chat.`,
+            });
+          } else {
+            toast({
+              title: 'Account Needed',
+              description: `${contact.name} must create a DroneX account to join the group chat.`,
+            });
+          }
+        } catch (e) {
+          console.warn('Link contact invocation failed:', e);
+        }
+      }
+
       toast({
         title: "🎉 Contact Verified Successfully!",
         description: (
