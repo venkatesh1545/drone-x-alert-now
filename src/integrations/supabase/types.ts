@@ -124,6 +124,51 @@ export type Database = {
         }
         Relationships: []
       }
+      contact_requests: {
+        Row: {
+          contact_email: string
+          contact_name: string
+          contact_phone: string | null
+          contact_user_id: string
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          message: string | null
+          relationship: string | null
+          request_status: string | null
+          requester_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          contact_email: string
+          contact_name: string
+          contact_phone?: string | null
+          contact_user_id: string
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          message?: string | null
+          relationship?: string | null
+          request_status?: string | null
+          requester_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          contact_email?: string
+          contact_name?: string
+          contact_phone?: string | null
+          contact_user_id?: string
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          message?: string | null
+          relationship?: string | null
+          request_status?: string | null
+          requester_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       disasters: {
         Row: {
           affected_radius: number | null
@@ -725,6 +770,42 @@ export type Database = {
           resolved_at?: string | null
           severity?: string | null
           title?: string
+        }
+        Relationships: []
+      }
+      user_messages: {
+        Row: {
+          created_at: string | null
+          from_user_id: string
+          id: string
+          is_read: boolean | null
+          message: string
+          message_type: string | null
+          subject: string | null
+          to_user_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          from_user_id: string
+          id?: string
+          is_read?: boolean | null
+          message: string
+          message_type?: string | null
+          subject?: string | null
+          to_user_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          from_user_id?: string
+          id?: string
+          is_read?: boolean | null
+          message?: string
+          message_type?: string | null
+          subject?: string | null
+          to_user_id?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
