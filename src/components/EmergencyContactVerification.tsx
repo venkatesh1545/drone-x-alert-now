@@ -13,11 +13,15 @@ interface EmergencyContact {
   name: string;
   phone: string;
   email?: string;
-  verification_status: 'pending' | 'verified' | 'failed';
-  verification_type: 'email' | 'sms';
+  relationship?: string;
+  priority: number;
+  verification_status: 'not_started' | 'pending' | 'verified' | 'failed';
+  verification_type?: 'email' | 'sms';
   verification_code?: string;
   verification_expires_at?: string;
   verified_at?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface EmergencyContactVerificationProps {
@@ -25,54 +29,40 @@ interface EmergencyContactVerificationProps {
   onVerificationUpdate: () => void;
 }
 
-// Updated Resend email sending function
-const sendVerificationEmail = async (email: string, name: string, code: string) => {
+const sendVerificationEmail = async (
+  email: string,
+  name: string,
+  code: string,
+  requesterName: string,
+  requesterEmail: string
+) => {
   try {
-    console.log(`Sending verification email to: ${email}`);
-    
     const { data, error } = await supabase.functions.invoke('send-verification-email', {
       body: {
         to: email,
         name: name,
-        verificationCode: code
+        verificationCode: code,
+        requesterName: requesterName,
+        requesterEmail: requesterEmail
       }
     });
 
     if (error) {
-      console.error('Supabase function error:', error);
-      const contextBody = (error as any)?.context?.body;
-      let detailedMsg = '';
-      try {
-        if (typeof contextBody === 'string') {
-          // Try parse JSON body returned by the edge function
-          const parsed = JSON.parse(contextBody);
-          detailedMsg = parsed?.error || parsed?.message || '';
-        } else if (contextBody && typeof contextBody === 'object') {
-          detailedMsg = (contextBody as any).error || (contextBody as any).message || '';
-        }
-      } catch (_) {
-        detailedMsg = typeof contextBody === 'string' ? contextBody : '';
-      }
-      throw new Error(`Failed to send email: ${detailedMsg || error.message}`);
+      console.error('Edge function error:', error);
+      throw new Error(`Failed to send email: ${error.message}`);
     }
 
-    if (data && data.success) {
-      console.log('✅ Email sent successfully! Email ID:', data.emailId);
-      return {
-        success: true,
-        message: data.message || 'Email processed',
-        emailId: data.emailId,
-        emailSent: !!data.emailSent,
-        devFallback: !!data.devFallback,
-        accountExists: !!data.accountExists,
-        verificationCode: (data as any).verificationCode,
-      };
-    } else {
-      throw new Error(data?.error || 'Unknown error occurred');
-    }
-    
-  } catch (error) {
-    console.error('❌ Email sending error:', error);
+    return {
+      success: data?.success || false,
+      message: data?.message || 'Email processed',
+      emailId: data?.emailId,
+      emailSent: !!data?.emailSent,
+      devFallback: !!data?.devFallback,
+      accountExists: !!data?.accountExists,
+      verificationCode: data?.verificationCode,
+    };
+  } catch (error: any) {
+    console.error('Email send error:', error);
     throw error;
   }
 };
@@ -91,15 +81,31 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
     
     try {
       const contact = contacts.find(c => c.id === contactId);
-      if (!contact) return;
+      if (!contact) {
+        toast({
+          title: "❌ Error",
+          description: "Contact not found",
+          variant: "destructive",
+        });
+        return;
+      }
 
       // Generate 6-digit verification code
       const code = Math.floor(100000 + Math.random() * 900000).toString();
-      
-      // Set expiration to 30 minutes from now
-      const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString(); // 30 minutes
 
-      // Update contact with verification code in database
+      // Get current user
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        toast({
+          title: "❌ Authentication Error",
+          description: "You must be logged in to send verification codes.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Update contact with verification code
       const { error: updateError } = await supabase
         .from('emergency_contacts')
         .update({
@@ -108,14 +114,34 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
           verification_expires_at: expiresAt,
           verification_status: 'pending'
         })
-        .eq('id', contactId);
+        .eq('id', contactId)
+        .eq('user_id', user.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Database update error:', updateError);
+        toast({
+          title: "❌ Database Error",
+          description: `Failed to update contact: ${updateError.message}`,
+          variant: "destructive",
+        });
+        return;
+      }
 
-      // Send email or SMS
       if (type === 'email' && contact.email) {
         try {
-          const result = await sendVerificationEmail(contact.email, contact.name, code);
+          const requesterName = user.user_metadata?.name || 
+                               user.user_metadata?.display_name || 
+                               user.user_metadata?.full_name || 
+                               user.email?.split('@')[0] || 'User';
+          const requesterEmail = user.email || '';
+
+          const result = await sendVerificationEmail(
+            contact.email,
+            contact.name,
+            code,
+            requesterName,
+            requesterEmail
+          );
 
           if (result.emailSent) {
             toast({
@@ -131,7 +157,6 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
               duration: 8000,
             });
           } else if (result.devFallback) {
-            // Provider blocked email (likely domain not verified). Show OTP for testing and keep status pending
             setVerificationCodes(prev => ({ ...prev, [contactId]: code }));
             toast({
               title: "🔧 Test Mode: OTP Shown",
@@ -152,26 +177,22 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
             });
           }
         } catch (emailError: any) {
-          console.error('Email sending failed:', emailError);
-          const errorMessage = emailError?.message || '';
+          console.error('Email service error:', emailError);
           toast({
             title: "⚠️ Email Service Error",
-            description: `Failed to send email to ${contact.email}. ${errorMessage || 'Please try again or contact support.'}`,
+            description: `Failed to send email: ${emailError.message || 'Please try again'}`,
             variant: "destructive",
             duration: 10000,
           });
-          // Keep 'pending' status so tester can still enter the code
         }
       } else if (type === 'sms') {
-        // SMS functionality - placeholder for future implementation
-        console.log(`SMS code for ${contact.phone}: ${code}`);
         toast({
           title: "📱 SMS Feature Coming Soon",
-          description: `SMS verification will be available soon. For now, use email verification.`,
+          description: "SMS verification will be available soon. For now, use email verification.",
           duration: 8000,
         });
         
-        // Reset to allow email attempt
+        // Reset status since SMS is not available
         await supabase
           .from('emergency_contacts')
           .update({
@@ -179,15 +200,16 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
             verification_code: null,
             verification_expires_at: null
           })
-          .eq('id', contactId);
+          .eq('id', contactId)
+          .eq('user_id', user.id);
       }
 
       onVerificationUpdate();
-    } catch (error) {
-      console.error('Error sending verification:', error);
+    } catch (error: any) {
+      console.error('Send verification error:', error);
       toast({
         title: "❌ Verification Failed",
-        description: "Failed to send verification code. Please try again.",
+        description: `Failed to send verification code: ${error.message || 'Please try again'}`,
         variant: "destructive",
       });
     } finally {
@@ -197,30 +219,82 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
 
   const verifyCode = async (contactId: string, inputCode: string) => {
     try {
-      const contact = contacts.find(c => c.id === contactId);
-      if (!contact) return;
+      // Get current user
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        toast({
+          title: "❌ Authentication Error",
+          description: "You must be logged in to verify contacts.",
+          variant: "destructive",
+        });
+        return;
+      }
 
-      // Check if code matches and hasn't expired
-      if (contact.verification_code !== inputCode) {
+      // Fetch the contact from database
+      const { data: contactData, error: fetchError } = await supabase
+        .from('emergency_contacts')
+        .select('*')
+        .eq('id', contactId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (fetchError) {
+        console.error('Fetch Error:', fetchError);
+        toast({
+          title: "❌ Verification Error",
+          description: `Database error: ${fetchError.message}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!contactData) {
+        toast({
+          title: "❌ Contact Not Found",
+          description: "Could not find this contact. Please refresh and try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Validate verification code
+      const storedCode = String(contactData.verification_code || '').trim();
+      const enteredCode = String(inputCode || '').trim();
+
+      if (storedCode.length !== 6 || enteredCode.length !== 6) {
         toast({
           title: "❌ Invalid Code",
-          description: "The verification code you entered is incorrect. Please check and try again.",
+          description: "The verification code must be exactly 6 digits.",
           variant: "destructive",
         });
         return;
       }
 
-      if (contact.verification_expires_at && new Date(contact.verification_expires_at) < new Date()) {
+      if (storedCode !== enteredCode) {
         toast({
-          title: "⏰ Code Expired",
-          description: "The verification code has expired. Please request a new one.",
+          title: "❌ Incorrect Code",
+          description: "The verification code you entered doesn't match. Please check and try again.",
           variant: "destructive",
         });
         return;
       }
 
-      // Mark as verified
-      const { error } = await supabase
+      // Check expiration
+      if (contactData.verification_expires_at) {
+        const expirationTime = new Date(contactData.verification_expires_at);
+        const currentTime = new Date();
+        if (expirationTime < currentTime) {
+          toast({
+            title: "⏰ Code Expired",
+            description: "The verification code has expired. Please request a new one.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      // Update verification status
+      const { data: updateData, error: updateError } = await supabase
         .from('emergency_contacts')
         .update({
           verification_status: 'verified',
@@ -228,52 +302,47 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
           verification_code: null,
           verification_expires_at: null
         })
-        .eq('id', contactId);
+        .eq('id', contactId)
+        .eq('user_id', user.id)
+        .select();
 
-      if (error) throw error;
+      if (updateError) {
+        console.error('Update Error:', updateError);
+        toast({
+          title: "❌ Database Update Failed",
+          description: `Error: ${updateError.message}. Please check your permissions and try again.`,
+          variant: "destructive",
+        });
+        return;
+      }
 
-      // Attempt to link this contact to an existing DroneX account by email (if any)
-      if (contact.email) {
-        try {
-          const { data: linkData, error: linkError } = await supabase.functions.invoke('link-contact-account', {
-            body: { contactId, email: contact.email }
-          });
-          if (linkError) {
-            console.warn('Link contact error:', linkError);
-          } else if (linkData && linkData.accountExists) {
-            toast({
-              title: '🔗 Account Linked',
-              description: `${contact.name} has a DroneX account and is now linked to the group chat.`,
-            });
-          } else {
-            toast({
-              title: 'Account Needed',
-              description: `${contact.name} must create a DroneX account to join the group chat.`,
-            });
-          }
-        } catch (e) {
-          console.warn('Link contact invocation failed:', e);
-        }
+      if (!updateData || updateData.length === 0) {
+        toast({
+          title: "❌ Update Failed",
+          description: "No rows were updated. Please check your database permissions.",
+          variant: "destructive",
+        });
+        return;
       }
 
       toast({
         title: "🎉 Contact Verified Successfully!",
         description: (
           <div className="space-y-1">
-            <p><strong>{contact.name}</strong> has been verified</p>
+            <p><strong>{contactData.name}</strong> has been verified</p>
             <p className="text-xs opacity-75">Emergency network activated</p>
           </div>
         ),
       });
 
-      // Clear the verification code input
       setVerificationCodes(prev => ({ ...prev, [contactId]: '' }));
       onVerificationUpdate();
-    } catch (error) {
-      console.error('Error verifying code:', error);
+
+    } catch (error: any) {
+      console.error('Verification Error:', error);
       toast({
         title: "❌ Verification Error",
-        description: "Failed to verify contact. Please try again.",
+        description: `Unexpected error: ${error?.message || 'Please try again'}`,
         variant: "destructive",
       });
     }
@@ -312,6 +381,24 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
     }
   };
 
+  const getPriorityBadge = (priority: number) => {
+    const priorityConfig = {
+      1: { label: 'Priority 1', className: 'border-red-500 text-red-700 bg-red-50' },
+      2: { label: 'Priority 2', className: 'border-orange-500 text-orange-700 bg-orange-50' },
+      3: { label: 'Priority 3', className: 'border-yellow-500 text-yellow-700 bg-yellow-50' },
+      4: { label: 'Priority 4', className: 'border-blue-500 text-blue-700 bg-blue-50' },
+      5: { label: 'Priority 5', className: 'border-gray-500 text-gray-700 bg-gray-50' }
+    };
+    
+    const config = priorityConfig[priority as keyof typeof priorityConfig] || priorityConfig[5];
+    
+    return (
+      <Badge variant="outline" className={`text-xs ${config.className}`}>
+        {config.label}
+      </Badge>
+    );
+  };
+
   const handleCodeChange = (contactId: string, code: string) => {
     setVerificationCodes(prev => ({ ...prev, [contactId]: code }));
   };
@@ -324,7 +411,7 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
           Contact Verification
         </CardTitle>
         <CardDescription>
-          Verify your emergency contacts to enable group chat and location sharing. 
+          Verify your emergency contacts to enable group chat and location sharing.
           Verification emails are sent instantly via our secure email service.
         </CardDescription>
       </CardHeader>
@@ -335,6 +422,7 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
               <div className="flex-1 min-w-0 mr-4">
                 <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <h4 className="font-medium truncate">{contact.name}</h4>
+                  {getPriorityBadge(contact.priority)}
                   {getStatusBadge(contact)}
                 </div>
                 <div className="text-sm text-muted-foreground space-y-1">
@@ -346,6 +434,11 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
                     <div className="flex items-center gap-2">
                       <Mail className="w-4 h-4 flex-shrink-0" />
                       <span className="truncate">{contact.email}</span>
+                    </div>
+                  )}
+                  {contact.relationship && (
+                    <div className="text-xs text-muted-foreground">
+                      Relationship: {contact.relationship}
                     </div>
                   )}
                   {contact.verified_at && (
@@ -406,7 +499,7 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
                       size="sm"
                       onClick={() => sendVerification(contact.id, verificationType)}
                       disabled={
-                        verifyingContact === contact.id || 
+                        verifyingContact === contact.id ||
                         (!contact.email && verificationType === 'email')
                       }
                       className="h-9 whitespace-nowrap"
@@ -438,7 +531,6 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
           )}
         </div>
 
-        {/* Verification Instructions */}
         {contacts.length > 0 && (
           <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <h4 className="font-medium text-blue-900 mb-2">📧 How Verification Works:</h4>
@@ -448,6 +540,31 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
               <li>• Enter the code and click "Verify" to activate the contact</li>
               <li>• Verified contacts can receive emergency notifications</li>
             </ul>
+            <div className="mt-4 pt-4 border-t border-blue-200">
+              <h5 className="font-medium text-blue-900 mb-2">🔢 Priority Levels:</h5>
+              <div className="text-sm text-blue-800 space-y-1">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="border-red-500 text-red-700 bg-red-50 text-xs">Priority 1</Badge>
+                  <span>Immediate family (spouse, parents)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="border-orange-500 text-orange-700 bg-orange-50 text-xs">Priority 2</Badge>
+                  <span>Close relatives (siblings, children)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="border-yellow-500 text-yellow-700 bg-yellow-50 text-xs">Priority 3</Badge>
+                  <span>Close friends</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="border-blue-500 text-blue-700 bg-blue-50 text-xs">Priority 4</Badge>
+                  <span>Colleagues, acquaintances</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="border-gray-500 text-gray-700 bg-gray-50 text-xs">Priority 5</Badge>
+                  <span>Neighbors, backup contacts</span>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </CardContent>

@@ -11,7 +11,10 @@ import { useToast } from '@/components/ui/use-toast';
 import { Users, Plus, Edit, Trash2, Network, Phone, Mail, User, Save, List, Heart, Check, Clock, X } from 'lucide-react';
 import { EmergencyContactsGraph } from './EmergencyContactsGraph';
 import EmergencyContactVerification from './EmergencyContactVerification';
+import GroupChatInbox from './GroupChatInbox';
 import EmergencyGroupChat from './EmergencyGroupChat';
+
+
 
 interface EmergencyContact {
   id?: string;
@@ -470,13 +473,9 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
         </TabsContent>
 
         <TabsContent value="chat">
-          <EmergencyGroupChat
-            onMemberRemoved={(contactId) => {
-              // Mark contact as removed from group chat
-              fetchContacts();
-            }}
-          />
+          <GroupChatInbox />
         </TabsContent>
+
 
         <TabsContent value="graph">
           <Card>
