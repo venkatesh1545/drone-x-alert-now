@@ -110,11 +110,18 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
             ),
             duration: 8000,
           });
-        } catch (emailError) {
+        } catch (emailError: any) {
           console.error('Email sending failed:', emailError);
+          
+          // Extract detailed error message
+          const errorMessage = emailError?.message || '';
+          const isResendDomainError = errorMessage.includes('verify a domain') || errorMessage.includes('testing emails');
+          
           toast({
             title: "⚠️ Email Service Error",
-            description: `Failed to send email to ${contact.email}. Please try again or contact support.`,
+            description: isResendDomainError 
+              ? "⚠️ Domain verification required: Please verify your domain at resend.com/domains to send emails to other recipients. Currently only test emails to your verified email are allowed."
+              : `Failed to send email to ${contact.email}. ${errorMessage || 'Please try again or contact support.'}`,
             variant: "destructive",
             duration: 10000,
           });
