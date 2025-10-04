@@ -75,21 +75,42 @@ serve(async (req) => {
       </div>
     `;
 
-    const { data: sendData, error: sendError } = await resend.emails.send({
-      from: 'DroneX <onboarding@resend.dev>',
-      to: [to],
-      subject,
-      html,
-    });
+    try {
+      const { data: sendData, error: sendError } = await resend.emails.send({
+        from: 'DroneX <onboarding@resend.dev>',
+        to: [to],
+        subject,
+        html,
+      });
 
-    if (sendError) {
-      throw sendError;
+      if (sendError) {
+        throw sendError;
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, message: 'Verification email sent successfully', emailSent: true, emailId: sendData?.id, accountExists }),
+        { headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    } catch (sendErr: any) {
+      const msg = String(sendErr?.message || '');
+      const status = (sendErr as any)?.statusCode || (sendErr as any)?.status || 500;
+      const isDomainRestriction = status === 403 || msg.toLowerCase().includes('verify a domain') || msg.toLowerCase().includes('testing emails');
+      if (isDomainRestriction) {
+        console.warn('Resend domain restriction encountered. Returning devFallback with OTP.');
+        return new Response(
+          JSON.stringify({
+            success: true,
+            emailSent: false,
+            accountExists,
+            devFallback: true,
+            verificationCode,
+            message: 'Email blocked by provider (domain not verified). OTP returned for testing.'
+          }),
+          { headers: { "Content-Type": "application/json", ...corsHeaders }, status: 200 }
+        );
+      }
+      throw sendErr;
     }
-
-    return new Response(
-      JSON.stringify({ success: true, message: 'Verification email sent successfully', emailSent: true, emailId: sendData?.id, accountExists }),
-      { headers: { "Content-Type": "application/json", ...corsHeaders } }
-    );
   } catch (error: any) {
     console.error('Email sending error:', error);
     return new Response(

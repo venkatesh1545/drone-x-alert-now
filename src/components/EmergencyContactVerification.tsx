@@ -58,10 +58,14 @@ const sendVerificationEmail = async (email: string, name: string, code: string) 
 
     if (data && data.success) {
       console.log('✅ Email sent successfully! Email ID:', data.emailId);
-      return { 
-        success: true, 
-        message: 'Email sent successfully',
-        emailId: data.emailId 
+      return {
+        success: true,
+        message: data.message || 'Email processed',
+        emailId: data.emailId,
+        emailSent: !!data.emailSent,
+        devFallback: !!data.devFallback,
+        accountExists: !!data.accountExists,
+        verificationCode: (data as any).verificationCode,
       };
     } else {
       throw new Error(data?.error || 'Unknown error occurred');
@@ -112,42 +116,51 @@ export const EmergencyContactVerification: React.FC<EmergencyContactVerification
       if (type === 'email' && contact.email) {
         try {
           const result = await sendVerificationEmail(contact.email, contact.name, code);
-          
-          toast({
-            title: "✅ Verification Email Sent!",
-            description: (
-              <div className="space-y-1">
-                <p>Verification code sent to <strong>{contact.email}</strong></p>
-                <p className="text-xs opacity-75">Email ID: {result.emailId}</p>
-              </div>
-            ),
-            duration: 8000,
-          });
+
+          if (result.emailSent) {
+            toast({
+              title: "✅ Verification Email Sent!",
+              description: (
+                <div className="space-y-1">
+                  <p>Verification code sent to <strong>{contact.email}</strong></p>
+                  {result.emailId && (
+                    <p className="text-xs opacity-75">Email ID: {result.emailId}</p>
+                  )}
+                </div>
+              ),
+              duration: 8000,
+            });
+          } else if (result.devFallback) {
+            // Provider blocked email (likely domain not verified). Show OTP for testing and keep status pending
+            setVerificationCodes(prev => ({ ...prev, [contactId]: code }));
+            toast({
+              title: "🔧 Test Mode: OTP Shown",
+              description: (
+                <div className="space-y-1">
+                  <p>Email not sent due to provider restrictions (domain not verified).</p>
+                  <p>Use this OTP: <strong className="font-mono">{code}</strong></p>
+                </div>
+              ),
+              duration: 12000,
+            });
+          } else {
+            toast({
+              title: "Email Not Sent",
+              description: `Could not send email to ${contact.email}. Please try again later.`,
+              variant: "destructive",
+              duration: 8000,
+            });
+          }
         } catch (emailError: any) {
           console.error('Email sending failed:', emailError);
-          
-          // Extract detailed error message
           const errorMessage = emailError?.message || '';
-          const isResendDomainError = errorMessage.includes('verify a domain') || errorMessage.includes('testing emails');
-          
           toast({
             title: "⚠️ Email Service Error",
-            description: isResendDomainError 
-              ? "⚠️ Domain verification required: Please verify your domain at resend.com/domains to send emails to other recipients. Currently only test emails to your verified email are allowed."
-              : `Failed to send email to ${contact.email}. ${errorMessage || 'Please try again or contact support.'}`,
+            description: `Failed to send email to ${contact.email}. ${errorMessage || 'Please try again or contact support.'}`,
             variant: "destructive",
             duration: 10000,
           });
-          
-          // Reset status on failure
-          await supabase
-            .from('emergency_contacts')
-            .update({
-              verification_status: 'failed',
-              verification_code: null,
-              verification_expires_at: null
-            })
-            .eq('id', contactId);
+          // Keep 'pending' status so tester can still enter the code
         }
       } else if (type === 'sms') {
         // SMS functionality - placeholder for future implementation
