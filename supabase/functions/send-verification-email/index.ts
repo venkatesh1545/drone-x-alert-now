@@ -60,7 +60,7 @@ serve(async (req) => {
         <h2 style="margin: 0 0 12px;">Hello${name ? ` ${name}` : ''},</h2>
         ${accountExists
           ? `<p>Use the One-Time Password (OTP) below to verify your emergency contact link:</p>`
-          : `<p>To join the emergency group chat, please create your account first using this email address, then use the OTP below to verify your contact link.</p>`
+          : `<p>To complete the verification and group chat, you must needs to sign up. Here's your OTP <strong>${verificationCode}</strong>.</p>`
         }
         <div style="margin: 16px 0; padding: 16px; background: #f7f7f8; border-radius: 8px; border: 1px solid #eee; text-align: center;">
           <div style="font-size: 12px; color: #666; letter-spacing: 0.08em; text-transform: uppercase;">Your verification code</div>
@@ -68,7 +68,7 @@ serve(async (req) => {
         </div>
         ${accountExists
           ? ''
-          : `<p style="margin: 12px 0 0;">After creating your account, return to the app and enter the code to complete verification.</p>`
+          : `<p style=\"margin: 12px 0 0;\">After creating your account, return to the app and enter the code to complete verification.</p>`
         }
         <p style="font-size: 12px; color: #666;">This code expires in 30 minutes. If you didn’t request this, you can ignore this message.</p>
         <p style="margin-top: 16px; color: #444;">— DroneX Team</p>

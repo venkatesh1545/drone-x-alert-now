@@ -40,7 +40,20 @@ const sendVerificationEmail = async (email: string, name: string, code: string) 
 
     if (error) {
       console.error('Supabase function error:', error);
-      throw new Error(`Failed to send email: ${error.message}`);
+      const contextBody = (error as any)?.context?.body;
+      let detailedMsg = '';
+      try {
+        if (typeof contextBody === 'string') {
+          // Try parse JSON body returned by the edge function
+          const parsed = JSON.parse(contextBody);
+          detailedMsg = parsed?.error || parsed?.message || '';
+        } else if (contextBody && typeof contextBody === 'object') {
+          detailedMsg = (contextBody as any).error || (contextBody as any).message || '';
+        }
+      } catch (_) {
+        detailedMsg = typeof contextBody === 'string' ? contextBody : '';
+      }
+      throw new Error(`Failed to send email: ${detailedMsg || error.message}`);
     }
 
     if (data && data.success) {
