@@ -10,16 +10,20 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Camera, Play, Square, Settings, Users, MapPin, 
   Zap, AlertTriangle, Video, Signal, Smartphone, 
-  Plane, Monitor, Wifi, Bluetooth 
+  Plane, Monitor, Wifi, Bluetooth, QrCode 
 } from 'lucide-react';
 import { useDroneStreaming, DroneStream } from '@/hooks/useDroneStreaming';
 import { useToast } from '@/hooks/use-toast';
+import { QRCodeGenerator } from './QRCodeGenerator';
+import { LiveStreamBroadcast } from './LiveStreamBroadcast';
 
 export const AdminStreamControls = () => {
   const { activeStreams, isAdmin, startStream, stopStream } = useDroneStreaming();
   const { toast } = useToast();
   const [showStartForm, setShowStartForm] = useState(false);
+  const [showQRCode, setShowQRCode] = useState(false);
   const [isStartingStream, setIsStartingStream] = useState(false);
+  const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     stream_name: '',
     location: '',
@@ -88,6 +92,7 @@ export const AdminStreamControls = () => {
 
       const stream = await startStream(streamData);
       if (stream) {
+        setActiveStreamId(stream.id);
         toast({
           title: "Stream Started",
           description: `Live stream "${formData.stream_name}" is now active`,
@@ -121,6 +126,7 @@ export const AdminStreamControls = () => {
   const handleStopStream = async (streamId: string) => {
     try {
       await stopStream(streamId);
+      setActiveStreamId(null);
       toast({
         title: "Stream Stopped",
         description: "Live stream has been stopped",
@@ -192,7 +198,33 @@ export const AdminStreamControls = () => {
           <Play className="h-4 w-4 mr-2" />
           Start New Stream
         </Button>
+        <Button
+          onClick={() => setShowQRCode(!showQRCode)}
+          variant="outline"
+          className="border-sky-300"
+        >
+          <QrCode className="h-4 w-4 mr-2" />
+          Mobile QR Code
+        </Button>
       </div>
+
+      {/* QR Code for Mobile Connection */}
+      {showQRCode && (
+        <QRCodeGenerator
+          streamUrl={`${window.location.origin}/mobile-stream`}
+          streamName="Mobile Device Stream"
+        />
+      )}
+
+      {/* Live Broadcast */}
+      {activeStreamId && (
+        <LiveStreamBroadcast
+          streamId={activeStreamId}
+          isAdmin={true}
+          onStop={() => handleStopStream(activeStreamId)}
+          quality={formData.stream_quality}
+        />
+      )}
 
       {/* Start Stream Form */}
       {showStartForm && (

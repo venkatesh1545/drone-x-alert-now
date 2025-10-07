@@ -16,7 +16,7 @@ interface RealtimeDroneStreamProps {
 }
 
 export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamProps) => {
-  const { activeStreams, currentStream, loading, joinStream, leaveStream, setCurrentStream } = useDroneStreaming();
+  const { activeStreams, currentStream, loading, joinStream, leaveStream, setCurrentStream, isAdmin } = useDroneStreaming();
   const [isPlaying, setIsPlaying] = useState(true);
   const [detectedObjects, setDetectedObjects] = useState<string[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -208,8 +208,8 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
           )}
         </div>
 
-        {/* Object Detection Alerts */}
-        {detectedObjects.length > 0 && (
+        {/* Object Detection Alerts - Admin Only */}
+        {isAdmin && detectedObjects.length > 0 && (
           <div className="absolute top-4 right-4 space-y-1">
             {detectedObjects.map((object, index) => (
               <Badge key={index} className="bg-orange-500/90 text-white block">
@@ -253,30 +253,34 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
           </div>
         </div>
 
-        {/* Simulated Detection Bounding Boxes */}
-        <div className="absolute inset-0 pointer-events-none">
-          {detectedObjects.includes("Person") && (
-            <div className="absolute top-1/3 left-1/4 w-20 h-32 border-2 border-red-500 rounded">
-              <div className="bg-red-500 text-white text-xs px-1 -mt-5">Person</div>
-            </div>
-          )}
-          {detectedObjects.includes("Vehicle") && (
-            <div className="absolute top-1/2 right-1/4 w-32 h-20 border-2 border-blue-500 rounded">
-              <div className="bg-blue-500 text-white text-xs px-1 -mt-5">Vehicle</div>
-            </div>
-          )}
-        </div>
+        {/* Simulated Detection Bounding Boxes - Admin Only */}
+        {isAdmin && (
+          <div className="absolute inset-0 pointer-events-none">
+            {detectedObjects.includes("Person") && (
+              <div className="absolute top-1/3 left-1/4 w-20 h-32 border-2 border-red-500 rounded">
+                <div className="bg-red-500 text-white text-xs px-1 -mt-5">Person</div>
+              </div>
+            )}
+            {detectedObjects.includes("Vehicle") && (
+              <div className="absolute top-1/2 right-1/4 w-32 h-20 border-2 border-blue-500 rounded">
+                <div className="bg-blue-500 text-white text-xs px-1 -mt-5">Vehicle</div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Stream Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="border-sky-100">
-          <CardContent className="p-3 text-center">
-            <Eye className="h-6 w-6 text-sky-500 mx-auto mb-1" />
-            <div className="text-sm font-medium">Objects Detected</div>
-            <div className="text-lg font-bold text-sky-600">{detectedObjects.length}</div>
-          </CardContent>
-        </Card>
+        {isAdmin && (
+          <Card className="border-sky-100">
+            <CardContent className="p-3 text-center">
+              <Eye className="h-6 w-6 text-sky-500 mx-auto mb-1" />
+              <div className="text-sm font-medium">Objects Detected</div>
+              <div className="text-lg font-bold text-sky-600">{detectedObjects.length}</div>
+            </CardContent>
+          </Card>
+        )}
         <Card className="border-green-100">
           <CardContent className="p-3 text-center">
             <Users className="h-6 w-6 text-green-500 mx-auto mb-1" />
