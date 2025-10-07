@@ -19,6 +19,7 @@ import GoogleMap from "@/components/GoogleMap";
 import { ProfileForm } from "@/components/ProfileForm";
 import { EmergencyContacts } from "@/components/EmergencyContacts";
 import { LocationSharing } from "@/components/LocationSharing";
+import EmergencyGuidelines from "@/components/EmergencyGuidelines";
 
 const Dashboard = () => {
   const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -329,61 +330,7 @@ const Dashboard = () => {
           </TabsContent>
 
           <TabsContent value="guidelines">
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[
-                { 
-                  title: "Earthquake Safety", 
-                  description: "Drop, Cover, and Hold On protocols",
-                  color: "border-orange-200 bg-orange-50",
-                  icon: "🏠"
-                },
-                { 
-                  title: "Hurricane Preparedness", 
-                  description: "Evacuation and shelter guidelines",
-                  color: "border-blue-200 bg-blue-50",
-                  icon: "🌪️"
-                },
-                { 
-                  title: "Fire Emergency", 
-                  description: "Evacuation routes and safety measures",
-                  color: "border-red-200 bg-red-50",
-                  icon: "🔥"
-                },
-                { 
-                  title: "Flood Response", 
-                  description: "Water safety and evacuation procedures",
-                  color: "border-cyan-200 bg-cyan-50",
-                  icon: "🌊"
-                },
-                { 
-                  title: "Medical Emergency", 
-                  description: "First aid and emergency response",
-                  color: "border-green-200 bg-green-50",
-                  icon: "🏥"
-                },
-                { 
-                  title: "General Preparedness", 
-                  description: "Emergency kit and communication plans",
-                  color: "border-purple-200 bg-purple-50",
-                  icon: "📋"
-                }
-              ].map((guideline, index) => (
-                <Card key={index} className={`${guideline.color} hover:shadow-lg transition-shadow cursor-pointer`}>
-                  <CardHeader className="text-center">
-                    <div className="text-4xl mb-2">{guideline.icon}</div>
-                    <CardTitle className="text-lg">{guideline.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <CardDescription className="text-center">
-                      {guideline.description}
-                    </CardDescription>
-                    <Button variant="outline" className="w-full mt-4">
-                      View Guidelines
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <EmergencyGuidelines />
           </TabsContent>
         </Tabs>
       </div>

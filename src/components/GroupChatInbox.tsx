@@ -6,6 +6,20 @@ import EmergencyGroupChat from './EmergencyGroupChat';
 import { Button } from '@/components/ui/button';
 import { Plus, MessageCircle, Users, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
 
+// Helper function to avoid type inference issues
+async function findUserIdByEmail(email: string): Promise<string | null> {
+  try {
+    const result = await (supabase as any)
+      .from('profiles')
+      .select('user_id')
+      .eq('email', email)
+      .limit(1);
+    return result.data?.[0]?.user_id || null;
+  } catch {
+    return null;
+  }
+}
+
 const GroupChatInbox = () => {
   const [groups, setGroups] = useState<any[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
@@ -53,19 +67,13 @@ const GroupChatInbox = () => {
           if (createError) throw createError;
 
           // Add verified contacts as members
-          const membersToAdd = [];
+          const membersToAdd: any[] = [];
           for (const contact of verifiedContacts) {
-            // Find user account for this contact
-            const { data: contactUser } = await supabase
-              .from('profiles')
-              .select('user_id')
-              .eq('email', contact.email)
-              .single();
-
-            if (contactUser) {
+            const userId = await findUserIdByEmail(contact.email);
+            if (userId) {
               membersToAdd.push({
                 group_id: newGroup.id,
-                user_id: contactUser.user_id,
+                user_id: userId,
                 display_name: contact.name,
                 is_active: true
               });

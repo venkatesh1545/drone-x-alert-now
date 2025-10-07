@@ -119,7 +119,7 @@ const EmergencyGroupChat: React.FC<EmergencyGroupChatProps> = ({ chatId }) => {
         .eq('group_id', chatId)
         .order('created_at', { ascending: true })
         .limit(100);
-      setMessages(msgs || []);
+      setMessages((msgs || []) as ChatMessage[]);
       
       setIsLoading(false);
     } catch (e) {
