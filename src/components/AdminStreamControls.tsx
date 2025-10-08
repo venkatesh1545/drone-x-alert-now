@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +11,8 @@ import {
   Zap, AlertTriangle, Video, Signal, Smartphone, 
   Plane, Monitor, Wifi, Bluetooth, QrCode 
 } from 'lucide-react';
-import { useDroneStreaming, DroneStream } from '@/hooks/useDroneStreaming';
+import { useDroneStreaming } from '@/hooks/useDroneStreaming';
+import { DroneStream } from '@/types/streaming'; // Import from types instead
 import { useToast } from '@/hooks/use-toast';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { LiveStreamBroadcast } from './LiveStreamBroadcast';
@@ -33,32 +33,13 @@ export const AdminStreamControls = () => {
     stream_quality: 'HD' as 'SD' | 'HD' | '4K',
     emergency_level: 'medium' as 'low' | 'medium' | 'high' | 'critical',
     description: '',
-    device_type: 'mobile' as 'mobile' | 'drone' | 'camera' | 'laptop',
+    device_type: 'laptop' as 'mobile' | 'drone' | 'camera' | 'laptop',
     connection_mode: 'wifi' as 'wifi' | 'bluetooth',
   });
 
   if (!isAdmin) {
     return null;
   }
-
-  const requestCameraAccess = async () => {
-    try {
-      const constraints = {
-        video: {
-          width: { ideal: formData.stream_quality === '4K' ? 3840 : formData.stream_quality === 'HD' ? 1920 : 1280 },
-          height: { ideal: formData.stream_quality === '4K' ? 2160 : formData.stream_quality === 'HD' ? 1080 : 720 },
-          facingMode: formData.device_type === 'mobile' ? 'environment' : 'user'
-        },
-        audio: true
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      return stream;
-    } catch (error) {
-      console.error('Camera access error:', error);
-      return null;
-    }
-  };
 
   const handleStartStream = async () => {
     if (!formData.stream_name || !formData.location) {
@@ -72,12 +53,14 @@ export const AdminStreamControls = () => {
 
     setIsStartingStream(true);
     try {
-      // Request camera access based on device type
-      const cameraStream = await requestCameraAccess();
-      if (!cameraStream) {
+      // Check camera availability first
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      
+      if (videoDevices.length === 0) {
         toast({
-          title: "Camera Access Denied",
-          description: "Please allow camera access to start the stream",
+          title: "No Camera Found",
+          description: "Please connect a camera device to start streaming",
           variant: "destructive"
         });
         setIsStartingStream(false);
@@ -108,14 +91,29 @@ export const AdminStreamControls = () => {
           stream_quality: 'HD',
           emergency_level: 'medium',
           description: '',
-          device_type: 'mobile',
+          device_type: 'laptop',
           connection_mode: 'wifi',
         });
       }
-    } catch (error) {
+    } catch (error: unknown) { // Changed from 'any' to 'unknown'
+      console.error('Stream start error:', error);
+      
+      let errorMessage = "Failed to start stream. Please try again.";
+      
+      // Proper type checking for error
+      if (error instanceof Error) {
+        if (error.name === 'NotAllowedError') {
+          errorMessage = "Camera access denied. Please allow camera permissions in your browser.";
+        } else if (error.name === 'NotFoundError') {
+          errorMessage = "No camera device found. Please connect a camera.";
+        } else if (error.name === 'NotReadableError') {
+          errorMessage = "Camera is already in use by another application.";
+        }
+      }
+      
       toast({
         title: "Stream Error",
-        description: "Failed to start stream. Please try again.",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
@@ -178,7 +176,7 @@ export const AdminStreamControls = () => {
               </div>
               <div>
                 <CardTitle className="text-lg">Admin Stream Controls</CardTitle>
-                <CardDescription>Manage live drone video streams</CardDescription>
+                <CardDescription>Manage live drone video streams with AI detection</CardDescription>
               </div>
             </div>
             <Badge className="bg-blue-100 text-blue-700">
@@ -194,6 +192,7 @@ export const AdminStreamControls = () => {
         <Button
           onClick={() => setShowStartForm(!showStartForm)}
           className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+          disabled={isStartingStream}
         >
           <Play className="h-4 w-4 mr-2" />
           Start New Stream
@@ -243,7 +242,7 @@ export const AdminStreamControls = () => {
                   id="stream_name"
                   value={formData.stream_name}
                   onChange={(e) => setFormData(prev => ({ ...prev, stream_name: e.target.value }))}
-                  placeholder="e.g., Downtown Emergency Response"
+                  placeholder="e.g., Emergency Alert"
                 />
               </div>
               <div className="space-y-2">
@@ -252,7 +251,7 @@ export const AdminStreamControls = () => {
                   id="location"
                   value={formData.location}
                   onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-                  placeholder="e.g., Main Street, City Center"
+                  placeholder="e.g., Rajahmundry, Godavari, Andhra Pradesh, IND"
                 />
               </div>
               <div className="space-y-2">
@@ -263,7 +262,7 @@ export const AdminStreamControls = () => {
                   step="any"
                   value={formData.latitude}
                   onChange={(e) => setFormData(prev => ({ ...prev, latitude: e.target.value }))}
-                  placeholder="e.g., 40.7128"
+                  placeholder="e.g., 40.7178"
                 />
               </div>
               <div className="space-y-2">
@@ -274,7 +273,7 @@ export const AdminStreamControls = () => {
                   step="any"
                   value={formData.longitude}
                   onChange={(e) => setFormData(prev => ({ ...prev, longitude: e.target.value }))}
-                  placeholder="e.g., -74.0060"
+                  placeholder="e.g., 74.0564"
                 />
               </div>
               <div className="space-y-2">
@@ -447,12 +446,12 @@ export const AdminStreamControls = () => {
                             {stream.stream_quality}
                           </div>
                           <div className="flex items-center">
-                            {getDeviceIcon((stream as any).device_type || 'mobile')}
-                            <span className="ml-1">{(stream as any).device_type || 'Mobile'}</span>
+                            {getDeviceIcon(stream.device_type || 'laptop')}
+                            <span className="ml-1">{stream.device_type || 'Laptop'}</span>
                           </div>
                           <div className="flex items-center">
-                            {getConnectionIcon((stream as any).connection_mode || 'wifi')}
-                            <span className="ml-1">{(stream as any).connection_mode || 'WiFi'}</span>
+                            {getConnectionIcon(stream.connection_mode || 'wifi')}
+                            <span className="ml-1">{stream.connection_mode || 'WiFi'}</span>
                           </div>
                         </div>
                       </div>

@@ -1,104 +1,154 @@
-
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { supabase } from '@/integrations/supabase/client';
+import { useNavigate } from 'react-router-dom';
 import { 
-  Camera, Play, Pause, Maximize, Settings, 
-  Eye, AlertTriangle, Zap, Users, MapPin, Signal,
-  Monitor, Volume2, FullscreenIcon
+  Camera, Zap, Users, MapPin, Signal,
+  Monitor, AlertTriangle, Loader2, Eye, History
 } from "lucide-react";
 import { useDroneStreaming } from '@/hooks/useDroneStreaming';
+import type { DroneStream } from '@/types/streaming';
 
 interface RealtimeDroneStreamProps {
   fullSize?: boolean;
 }
 
 export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamProps) => {
+  const navigate = useNavigate();
   const { activeStreams, currentStream, loading, joinStream, leaveStream, setCurrentStream, isAdmin } = useDroneStreaming();
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [detectedObjects, setDetectedObjects] = useState<string[]>([]);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [receivedFrame, setReceivedFrame] = useState<string | null>(null);
+  const [frameCount, setFrameCount] = useState(0);
+  const [isReceiving, setIsReceiving] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
+  const [imageError, setImageError] = useState(false);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastFrameNumberRef = useRef<number>(0);
+  const mountedRef = useRef(true);
+  const currentStreamIdRef = useRef<string | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
-    if (currentStream && isPlaying) {
-      startSimulatedStream();
+    currentStreamIdRef.current = currentStream?.id || null;
+  }, [currentStream?.id]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const streamId = currentStream?.id;
+
+    if (streamId && !isAdmin) {
+      console.log('🎬 Starting polling for stream:', currentStream.stream_name, '| ID:', streamId);
+      startPollingFrames(streamId);
+    } else {
+      console.log('🛑 Conditions not met for polling - stopping');
+      stopPollingFrames();
     }
-    
-    // Simulate object detection
-    const detectionInterval = setInterval(() => {
-      if (currentStream && isPlaying) {
-        const objects = ["Person", "Vehicle", "Building", "Debris", "Smoke"];
-        const randomObjects = objects.filter(() => Math.random() > 0.7);
-        setDetectedObjects(randomObjects);
-      }
-    }, 3000);
 
     return () => {
-      clearInterval(detectionInterval);
-      stopSimulatedStream();
+      mountedRef.current = false;
+      stopPollingFrames();
     };
-  }, [currentStream, isPlaying]);
+  }, [currentStream?.id, isAdmin]);
 
-  const startSimulatedStream = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          width: fullSize || isFullscreen ? 1280 : 640, 
-          height: fullSize || isFullscreen ? 720 : 480 
-        } 
-      });
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-      }
-    } catch (error) {
-      console.error("Error accessing camera for simulation:", error);
+  const startPollingFrames = (streamId: string) => {
+    if (pollIntervalRef.current) {
+      console.log('⏹️ Stopping existing poll');
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
     }
-  };
 
-  const stopSimulatedStream = () => {
-    if (videoRef.current?.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
-    }
-  };
+    console.log(`📡 Starting frame polling for stream: ${streamId}`);
+    setIsReceiving(true);
+    setConnectionStatus('connecting');
+    lastFrameNumberRef.current = 0;
+    setReceivedFrame(null);
+    setImageError(false);
 
-  const togglePlayPause = () => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pause();
+    fetchLatestFrame(streamId);
+
+    pollIntervalRef.current = setInterval(() => {
+      if (mountedRef.current && currentStreamIdRef.current === streamId) {
+        fetchLatestFrame(streamId);
       } else {
-        videoRef.current.play();
+        console.log('⏹️ Stream changed or unmounted, stopping poll');
+        stopPollingFrames();
       }
-      setIsPlaying(!isPlaying);
+    }, 150);
+
+    console.log('✅ Frame polling interval created');
+  };
+
+  const fetchLatestFrame = async (streamId: string) => {
+    if (!mountedRef.current) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('stream_frames')
+        .select('frame_data, frame_number')
+        .eq('stream_id', streamId)
+        .order('frame_number', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('❌ Error fetching frame:', error);
+        setConnectionStatus('error');
+        return;
+      }
+
+      if (data && data.frame_data) {
+        if (data.frame_number > lastFrameNumberRef.current) {
+          console.log(`✅ Received frame: ${data.frame_number}`);
+          console.log(`🖼️ Frame data length: ${data.frame_data.length} chars`);
+          console.log(`🖼️ Frame preview: ${data.frame_data.substring(0, 50)}...`);
+          
+          setReceivedFrame(data.frame_data);
+          setFrameCount(data.frame_number);
+          lastFrameNumberRef.current = data.frame_number;
+          setConnectionStatus('connected');
+          setImageError(false);
+        }
+      } else {
+        if (lastFrameNumberRef.current === 0) {
+          console.log('⏳ Waiting for first frame...');
+        }
+      }
+    } catch (err) {
+      console.error('❌ Exception fetching frame:', err);
+      setConnectionStatus('error');
     }
   };
 
-  const toggleFullscreen = () => {
-    if (!isFullscreen && containerRef.current) {
-      containerRef.current.requestFullscreen?.();
-      setIsFullscreen(true);
-    } else if (isFullscreen) {
-      document.exitFullscreen?.();
-      setIsFullscreen(false);
+  const stopPollingFrames = () => {
+    if (pollIntervalRef.current) {
+      console.log('🛑 Stopping frame polling');
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
     }
+    setIsReceiving(false);
   };
 
-  const switchStream = (stream: any) => {
+  const switchStream = (stream: DroneStream) => {
+    console.log('🔄 Switching stream to:', stream.stream_name);
+    
     if (currentStream) {
       leaveStream(currentStream.id);
     }
+    
+    stopPollingFrames();
+    setReceivedFrame(null);
+    setFrameCount(0);
+    lastFrameNumberRef.current = 0;
+    setConnectionStatus('connecting');
+    setImageError(false);
+    
     setCurrentStream(stream);
     joinStream(stream.id);
   };
 
-  const containerHeight = fullSize || isFullscreen ? "h-96" : "h-64";
+  const containerHeight = fullSize ? "h-96" : "h-64";
 
   if (loading) {
     return (
@@ -115,12 +165,20 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
 
   if (activeStreams.length === 0) {
     return (
-      <Alert className="border-orange-200 bg-orange-50">
-        <AlertTriangle className="h-4 w-4 text-orange-600" />
-        <AlertDescription className="text-orange-700">
-          <div className="space-y-2">
-            <p className="font-semibold">No Active Drone Streams</p>
-            <p>No admin has started a live drone stream yet. Streams will appear here when activated by emergency response teams.</p>
+      <Alert className="border-blue-200 bg-blue-50">
+        <History className="h-4 w-4 text-blue-600" />
+        <AlertDescription className="text-blue-700">
+          <div className="space-y-3">
+            <p className="font-semibold text-lg">No Active Live Streams</p>
+            <p>There are no emergency response teams broadcasting at the moment.</p>
+            <Button 
+              onClick={() => navigate('/past-streams')} 
+              variant="outline" 
+              className="mt-2"
+            >
+              <History className="h-4 w-4 mr-2" />
+              View Past Streams
+            </Button>
           </div>
         </AlertDescription>
       </Alert>
@@ -160,6 +218,12 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
                 <Badge className="bg-blue-100 text-blue-700">
                   {currentStream.stream_quality}
                 </Badge>
+                {receivedFrame && connectionStatus === 'connected' && (
+                  <Badge className="bg-green-100 text-green-700">
+                    <Eye className="h-3 w-3 mr-1" />
+                    Receiving
+                  </Badge>
+                )}
               </div>
               <div className="flex items-center space-x-3 text-sm text-gray-600">
                 <div className="flex items-center">
@@ -177,110 +241,92 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
       )}
 
       {/* Live Video Feed */}
-      <div ref={containerRef} className={`relative ${containerHeight} bg-black rounded-lg overflow-hidden`}>
-        <video
-          ref={videoRef}
-          className="w-full h-full object-cover"
-          autoPlay
-          muted
-          playsInline
-        />
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full pointer-events-none"
-        />
-        
-        {/* Live Indicator */}
-        <div className="absolute top-4 left-4 flex space-x-2">
-          <Badge className="bg-red-500/90 text-white">
-            <Zap className="h-3 w-3 mr-1" />
-            LIVE
-          </Badge>
-          <Badge className="bg-green-500/90 text-white">
-            <Eye className="h-3 w-3 mr-1" />
-            AI Detection Active
-          </Badge>
-          {currentStream && (
-            <Badge className="bg-blue-500/90 text-white">
-              <Signal className="h-3 w-3 mr-1" />
-              {currentStream.stream_quality}
-            </Badge>
-          )}
-        </div>
-
-        {/* Object Detection Alerts - Admin Only */}
-        {isAdmin && detectedObjects.length > 0 && (
-          <div className="absolute top-4 right-4 space-y-1">
-            {detectedObjects.map((object, index) => (
-              <Badge key={index} className="bg-orange-500/90 text-white block">
-                <AlertTriangle className="h-3 w-3 mr-1" />
-                {object} Detected
+      <div className={`relative ${containerHeight} bg-black rounded-lg overflow-hidden`}>
+        {!isAdmin && receivedFrame ? (
+          <>
+            <img
+              ref={imgRef}
+              key={`frame-${frameCount}`}
+              src={receivedFrame}
+              alt={`Frame ${frameCount}`}
+              className="w-full h-full object-cover"
+              style={{ display: 'block' }}
+              onLoad={() => {
+                console.log(`🖼️ ✅ Frame ${frameCount} loaded successfully!`);
+                setImageError(false);
+              }}
+              onError={(e) => {
+                console.error(`❌ Frame ${frameCount} failed to load!`);
+                console.log('Error:', e);
+                setImageError(true);
+              }}
+            />
+            
+            <div className="absolute top-4 left-4 flex gap-2 z-10">
+              <Badge className="bg-red-500 text-white">
+                <span className="animate-pulse mr-1">●</span>
+                LIVE
               </Badge>
-            ))}
-          </div>
-        )}
+              <Badge className="bg-green-500 text-white">
+                <Signal className="h-3 w-3 mr-1 animate-pulse" />
+                Streaming
+              </Badge>
+              {imageError && (
+                <Badge className="bg-yellow-500 text-white">
+                  ⚠️ Image Error
+                </Badge>
+              )}
+            </div>
 
-        {/* Control Overlay */}
-        <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center">
-          <div className="flex space-x-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={togglePlayPause}
-              className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30"
-            >
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={toggleFullscreen}
-              className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30"
-            >
-              <FullscreenIcon className="h-4 w-4" />
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30"
-            >
-              <Volume2 className="h-4 w-4" />
-            </Button>
-          </div>
-          
-          <div className="text-white text-sm bg-black/50 px-2 py-1 rounded">
-            {new Date().toLocaleTimeString()}
-          </div>
-        </div>
+            <div className="absolute bottom-4 right-4 flex gap-2 z-10">
+              <div className="bg-black/70 text-white px-3 py-1 rounded text-sm">
+                Frame: {frameCount}
+              </div>
+              <div className="bg-black/70 text-white px-3 py-1 rounded text-sm">
+                {new Date().toLocaleTimeString()}
+              </div>
+            </div>
+          </>
+        ) : !isAdmin && !receivedFrame && currentStream ? (
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
+            <div className="text-center text-white p-8 max-w-md">
+              <Loader2 className="h-16 w-16 mx-auto mb-4 animate-spin text-sky-400" />
+              <h3 className="text-xl font-semibold mb-2">
+                {connectionStatus === 'connecting' ? 'Connecting to Stream' : 'Waiting for Stream'}
+              </h3>
+              <p className="text-sm opacity-75 mb-4">
+                {connectionStatus === 'error' 
+                  ? 'Connection error. Retrying...' 
+                  : 'Waiting for admin to start broadcasting...'}
+              </p>
+              {currentStream && (
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-center gap-2">
+                    <MapPin className="h-4 w-4" />
+                    <span>{currentStream.location}</span>
+                  </div>
+                  <div className="flex items-center justify-center gap-2">
+                    <Monitor className="h-4 w-4" />
+                    <span>{currentStream.stream_quality} Quality</span>
+                  </div>
+                  <div className="flex items-center justify-center gap-2">
+                    <Signal className="h-4 w-4 animate-pulse" />
+                    <span>Stream ID: {currentStream.id.substring(0, 8)}...</span>
+                  </div>
+                </div>
+              )}
+            </div>
 
-        {/* Simulated Detection Bounding Boxes - Admin Only */}
-        {isAdmin && (
-          <div className="absolute inset-0 pointer-events-none">
-            {detectedObjects.includes("Person") && (
-              <div className="absolute top-1/3 left-1/4 w-20 h-32 border-2 border-red-500 rounded">
-                <div className="bg-red-500 text-white text-xs px-1 -mt-5">Person</div>
-              </div>
-            )}
-            {detectedObjects.includes("Vehicle") && (
-              <div className="absolute top-1/2 right-1/4 w-32 h-20 border-2 border-blue-500 rounded">
-                <div className="bg-blue-500 text-white text-xs px-1 -mt-5">Vehicle</div>
-              </div>
-            )}
+            <div className="absolute inset-0 opacity-20">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-sky-500 to-transparent animate-pulse"></div>
+              <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-sky-500 to-transparent animate-pulse"></div>
+            </div>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Stream Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {isAdmin && (
-          <Card className="border-sky-100">
-            <CardContent className="p-3 text-center">
-              <Eye className="h-6 w-6 text-sky-500 mx-auto mb-1" />
-              <div className="text-sm font-medium">Objects Detected</div>
-              <div className="text-lg font-bold text-sky-600">{detectedObjects.length}</div>
-            </CardContent>
-          </Card>
-        )}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <Card className="border-green-100">
           <CardContent className="p-3 text-center">
             <Users className="h-6 w-6 text-green-500 mx-auto mb-1" />

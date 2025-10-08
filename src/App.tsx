@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,7 +11,8 @@ import Dashboard from "./pages/Dashboard";
 import AIAssistant from "./pages/AIAssistant";
 import Admin from "./pages/Admin";
 import RescueTeam from "./pages/RescueTeam";
-import NotFound from "./pages/NotFound";
+import MobileStream from "./pages/MobileStream";
+import { NotFound } from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
@@ -31,6 +31,10 @@ const App = () => (
           <Route path="/ai-assistant" element={<AIAssistant />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/rescue-team" element={<RescueTeam />} />
+          
+          {/* Mobile Device Streaming Route */}
+          <Route path="/mobile-stream" element={<MobileStream />} />
+          
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
