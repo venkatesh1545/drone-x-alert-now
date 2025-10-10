@@ -98,6 +98,7 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
         return;
       }
 
+      
       if (data && data.frame_data) {
         if (data.frame_number > lastFrameNumberRef.current) {
           console.log(`✅ Received frame: ${data.frame_number}`);

@@ -1,19 +1,23 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
   Mic, MicOff, Volume2, VolumeX, Bot, Loader2, 
-  Radio, Zap 
+  Radio
 } from 'lucide-react';
 import { useVoiceRecording } from '@/hooks/useVoiceRecording';
 import { useAudioPlayback } from '@/hooks/useAudioPlayback';
 import { useToast } from '@/hooks/use-toast';
+import axios from 'axios';
 
 interface VoiceAssistantProps {
   onTranscript: (text: string) => void;
   isProcessing?: boolean;
+}
+
+interface GeminiAssistantResponse {
+  reply: string;
 }
 
 export const VoiceAssistant = ({ onTranscript, isProcessing = false }: VoiceAssistantProps) => {
@@ -24,9 +28,11 @@ export const VoiceAssistant = ({ onTranscript, isProcessing = false }: VoiceAssi
   const { playAudio, stopAudio } = useAudioPlayback();
   const { toast } = useToast();
 
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:4000";
+
+
   useEffect(() => {
     if (isRecording) {
-      // Simulate audio level animation
       const interval = setInterval(() => {
         setAudioLevel(Math.random() * 100);
       }, 100);
@@ -57,18 +63,44 @@ export const VoiceAssistant = ({ onTranscript, isProcessing = false }: VoiceAssi
     try {
       const audioData = await stopRecording();
       setIsListening(false);
-      
+
       if (audioData) {
-        // Simulate speech-to-text conversion
-        setTimeout(() => {
-          const simulatedTranscript = "I need help with an emergency situation";
-          onTranscript(simulatedTranscript);
-        }, 1000);
+        const simulatedTranscript = "I need help with an emergency situation";
+        onTranscript(simulatedTranscript);
+
+        toast({
+          title: "Processing request...",
+          description: "Contacting AI rescue assistant",
+        });
+
+        const { data } = await axios.post<GeminiAssistantResponse>(
+          `${BACKEND_URL}/api/gemini-assistant`,
+          { input: simulatedTranscript }
+        );
+
+        if (data && data.reply) {
+          toast({
+            title: "AI Assistant",
+            description: data.reply,
+            duration: 8000,
+          });
+        } else {
+          toast({
+            title: "AI Assistant",
+            description: "No response from AI rescue assistant.",
+            variant: "destructive",
+          });
+        }
       }
     } catch (error) {
+      const message =
+        (error as { isAxiosError?: boolean }).isAxiosError
+
+          ? error.response?.data?.error || error.message
+          : "Failed to reach backend.";
       toast({
-        title: "Recording Error",
-        description: "Failed to process audio recording",
+        title: "AI Assistant Error",
+        description: message,
         variant: "destructive",
       });
     }
@@ -112,7 +144,7 @@ export const VoiceAssistant = ({ onTranscript, isProcessing = false }: VoiceAssi
                   key={i}
                   className="w-2 bg-sky-500 rounded-full transition-all duration-100"
                   style={{
-                    height: `${Math.max(8, (audioLevel + Math.random() * 20))}px`,
+                    height: `${Math.max(8, audioLevel + Math.random() * 20)}px`,
                     opacity: 0.7 + Math.random() * 0.3,
                   }}
                 />
@@ -127,8 +159,8 @@ export const VoiceAssistant = ({ onTranscript, isProcessing = false }: VoiceAssi
               disabled={isProcessing}
               className={`w-20 h-20 rounded-full ${
                 isListening
-                  ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-200'
-                  : 'bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 shadow-lg shadow-sky-200'
+                  ? "bg-red-500 hover:bg-red-600 shadow-lg shadow-red-200"
+                  : "bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 shadow-lg shadow-sky-200"
               } transition-all duration-200`}
             >
               {isProcessing ? (

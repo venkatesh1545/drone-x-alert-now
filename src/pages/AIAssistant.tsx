@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,10 +8,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Bot, Send, MapPin, Phone, AlertTriangle, Heart, 
   Shield, Home, Utensils, MessageCircle, CheckCircle, Clock,
-  Mic, Volume2, Headphones
+  Headphones
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { SafePlacesList } from '@/components/SafePlacesList';
 import { VoiceAssistant } from "@/components/VoiceAssistant";
 import { useRealtimeChat } from "@/hooks/useRealtimeChat";
 
@@ -24,7 +24,7 @@ const AIAssistant = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   
-  const { messages, currentSession, loading, sendMessage } = useRealtimeChat();
+  const { messages, loading, sendMessage } = useRealtimeChat();
 
   useEffect(() => {
     // Get user location
@@ -80,14 +80,14 @@ const AIAssistant = () => {
     const category = emergencyCategories.find(cat => cat.type === type);
     const content = `Emergency: ${category?.label}`;
     
-    await sendMessage(content, undefined, userLocation);
+    await sendMessage(content, undefined, userLocation ?? undefined);
     setShowConfirmation(true);
   };
 
   const handleSendMessage = async () => {
     if (!input.trim()) return;
     
-    await sendMessage(input, undefined, userLocation);
+    await sendMessage(input, undefined, userLocation ?? undefined);
     setInput("");
     
     // Check for emergency keywords
@@ -99,7 +99,7 @@ const AIAssistant = () => {
   };
 
   const handleVoiceTranscript = async (transcript: string) => {
-    await sendMessage(transcript, undefined, userLocation);
+    await sendMessage(transcript, undefined, userLocation ?? undefined);
     
     // Check for emergency keywords
     const lowerTranscript = transcript.toLowerCase();
@@ -165,7 +165,7 @@ const AIAssistant = () => {
           {userLocation && (
             <div className="flex items-center justify-center mt-2 text-sm text-green-600">
               <MapPin className="h-4 w-4 mr-1" />
-              Location tracking active
+              Location tracking active ({userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)})
             </div>
           )}
         </div>
@@ -280,29 +280,44 @@ const AIAssistant = () => {
                       key={message.id}
                       className={`flex ${message.message_type === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
-                      <div
-                        className={`max-w-[80%] p-4 rounded-lg ${
-                          message.message_type === 'user'
-                            ? 'bg-sky-500 text-white'
-                            : 'bg-gray-100 text-gray-900'
-                        }`}
-                      >
-                        {message.message_type === 'assistant' && (
-                          <div className="flex items-center space-x-2 mb-2">
-                            <Bot className="h-4 w-4 text-sky-500" />
-                            <span className="text-xs font-medium text-sky-600">DroneX AI</span>
+                      <div className={`max-w-[85%] ${message.message_type === 'user' ? '' : 'w-full'}`}>
+                        <div
+                          className={`p-4 rounded-lg ${
+                            message.message_type === 'user'
+                              ? 'bg-sky-500 text-white'
+                              : 'bg-gray-100 text-gray-900'
+                          }`}
+                        >
+                          {message.message_type === 'assistant' && (
+                            <div className="flex items-center space-x-2 mb-2">
+                              <Bot className="h-4 w-4 text-sky-500" />
+                              <span className="text-xs font-medium text-sky-600">DroneX AI</span>
+                            </div>
+                          )}
+                          <p className="whitespace-pre-wrap">{message.content}</p>
+                          {message.location_data && (
+                            <div className="flex items-center space-x-1 mt-2 text-xs opacity-75">
+                              <MapPin className="h-3 w-3" />
+                              <span>
+                                Location: {message.location_data.lat.toFixed(5)}, {message.location_data.lng.toFixed(5)}
+                                {message.location_data.placeName && ` (${message.location_data.placeName})`}
+                              </span>
+                            </div>
+                          )}
+                          <div className={`text-xs mt-2 opacity-75 ${message.message_type === 'user' ? 'text-sky-100' : 'text-gray-500'}`}>
+                            {new Date(message.created_at).toLocaleTimeString()}
                           </div>
-                        )}
-                        <p className="whitespace-pre-wrap">{message.content}</p>
-                        {message.location_data && (
-                          <div className="flex items-center space-x-1 mt-2 text-xs opacity-75">
-                            <MapPin className="h-3 w-3" />
-                            <span>Location shared</span>
-                          </div>
-                        )}
-                        <div className={`text-xs mt-2 opacity-75 ${message.message_type === 'user' ? 'text-sky-100' : 'text-gray-500'}`}>
-                          {new Date(message.created_at).toLocaleTimeString()}
                         </div>
+                        
+                        {/* Display Safe Places List */}
+                        {message.safe_places && message.safe_places.length > 0 && message.message_type === 'assistant' && (
+                          <div className="mt-3">
+                            <SafePlacesList 
+                              places={message.safe_places} 
+                              userLocation={message.location_data ? { lat: message.location_data.lat, lng: message.location_data.lng } : undefined}
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -344,7 +359,7 @@ const AIAssistant = () => {
                     </Button>
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    💡 Try: "I'm trapped in a building", "Medical emergency", or "Need rescue"
+                    💡 Try: "Earthquake in Kakinada", "Medical emergency near me", or "Need rescue"
                   </p>
                 </div>
               </CardContent>
