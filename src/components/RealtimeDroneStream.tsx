@@ -8,9 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from 'react-router-dom';
 import {
   Camera, Zap, Users, MapPin, Signal,
-  Monitor, AlertTriangle, Loader2, Eye, History, Shield, Trash2, Wifi
+  Monitor, AlertTriangle, Loader2, History, Shield, Trash2, Wifi
 } from "lucide-react";
-import { API_ENDPOINTS } from '@/config/api';
 import { useDroneStreaming } from '@/hooks/useDroneStreaming';
 import type { DroneStream } from '@/types/streaming';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -23,20 +22,6 @@ type StreamFrame = {
   frame_number?: number;
   created_at?: string;
   updated_at?: string;
-};
-
-type RekognitionLabel = {
-  Name: string;
-  Confidence?: number;
-  Instances?: Array<{
-    BoundingBox: {
-      Width: number;
-      Height: number;
-      Left: number;
-      Top: number;
-    };
-    Confidence?: number;
-  }>;
 };
 
 interface RealtimeDroneStreamProps {
@@ -63,18 +48,12 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
   const [fps, setFps] = useState(0);
   const [latency, setLatency] = useState(0);
 
-  // Detection state (admin only)
-  const [detectionLabels, setDetectionLabels] = useState<RekognitionLabel[]>([]);
-  const [isDetecting, setIsDetecting] = useState(false);
-  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
   useEffect(() => {
     mountedRef.current = true;
     
     return () => {
       mountedRef.current = false;
       stopRealtimeSubscription();
-      stopDetection();
       stopFrameRendering();
     };
   }, []);
@@ -83,24 +62,17 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
     const streamId = currentStream?.id;
     
     if (streamId) {
+      console.log('📡 Stream selected:', streamId);
       startRealtimeSubscription(streamId);
-      
-      if (isAdmin) {
-        startDetectionPolling();
-      } else {
-        stopDetection();
-      }
     } else {
       stopRealtimeSubscription();
-      stopDetection();
     }
     
     return () => {
       stopRealtimeSubscription();
-      stopDetection();
     };
     // eslint-disable-next-line
-  }, [currentStream?.id, isAdmin]);
+  }, [currentStream?.id]);
 
   // --- REALTIME SUBSCRIPTION (Smooth Streaming) ---
   const startRealtimeSubscription = useCallback((streamId: string) => {
@@ -113,7 +85,6 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
     
     console.log(`🎬 Starting realtime subscription for stream: ${streamId}`);
 
-    // Subscribe to frame updates via Supabase Realtime
     const channel = supabase.channel(`stream:${streamId}`)
       .on(
         'postgres_changes',
@@ -129,10 +100,8 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
           const newFrame = payload.new as StreamFrame;
           
           if (newFrame?.frame_data) {
-            // Add to buffer for smooth playback
             frameBufferRef.current.push(newFrame.frame_data);
             
-            // Keep buffer size manageable (max 10 frames)
             if (frameBufferRef.current.length > 10) {
               frameBufferRef.current.shift();
             }
@@ -140,7 +109,6 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
             setConnectionStatus('connected');
             setFrameCount(newFrame.frame_number || 0);
             
-            // Calculate latency
             if (newFrame.created_at) {
               const now = Date.now();
               const frameTime = new Date(newFrame.created_at).getTime();
@@ -150,24 +118,23 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
         }
       )
       .subscribe((status) => {
-        console.log('Subscription status:', status);
+        console.log('📺 Subscription status:', status);
         if (status === 'SUBSCRIBED') {
           setConnectionStatus('connected');
           startFrameRendering();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           setConnectionStatus('error');
-          console.error('Realtime subscription error');
+          console.error('❌ Realtime subscription error');
         }
       });
     
     realtimeChannelRef.current = channel;
-
-    // Fetch latest frame immediately
     fetchInitialFrame(streamId);
   }, []);
 
   const fetchInitialFrame = async (streamId: string) => {
     try {
+      console.log('🖼️ Fetching initial frame for stream:', streamId);
       const { data } = await supabase
         .from('stream_frames')
         .select('frame_data, frame_number')
@@ -177,21 +144,24 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
         .maybeSingle();
       
       if (data?.frame_data) {
+        console.log('✅ Initial frame loaded, frame number:', data.frame_number);
         setReceivedFrame(data.frame_data);
         setFrameCount(data.frame_number || 0);
+      } else {
+        console.log('⚠️ No initial frame found');
       }
     } catch (err) {
-      console.error('Initial frame fetch error:', err);
+      console.error('❌ Initial frame fetch error:', err);
     }
   };
 
   const startFrameRendering = () => {
     if (renderIntervalRef.current) return;
     
+    console.log('🎥 Starting frame rendering at 30 FPS');
     let frameCounter = 0;
     let lastTime = Date.now();
     
-    // Render frames from buffer at ~30 FPS
     renderIntervalRef.current = setInterval(() => {
       if (frameBufferRef.current.length > 0) {
         const frame = frameBufferRef.current.shift();
@@ -201,20 +171,20 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
         }
       }
       
-      // Calculate FPS every second
       const now = Date.now();
       if (now - lastTime >= 1000) {
         setFps(frameCounter);
         frameCounter = 0;
         lastTime = now;
       }
-    }, 33); // ~30 FPS
+    }, 33);
   };
 
   const stopFrameRendering = () => {
     if (renderIntervalRef.current) {
       clearInterval(renderIntervalRef.current);
       renderIntervalRef.current = null;
+      console.log('⏹️ Frame rendering stopped');
     }
   };
 
@@ -222,6 +192,7 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
     if (realtimeChannelRef.current) {
       supabase.removeChannel(realtimeChannelRef.current);
       realtimeChannelRef.current = null;
+      console.log('📡 Realtime subscription stopped');
     }
     stopFrameRendering();
     frameBufferRef.current = [];
@@ -229,15 +200,14 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
 
   // --- STREAM SWITCHING ---
   const switchStream = (stream: DroneStream) => {
+    console.log('🔄 Switching to stream:', stream.stream_name);
     if (currentStream) leaveStream(currentStream.id);
     
     stopRealtimeSubscription();
-    stopDetection();
     setReceivedFrame(null);
     setFrameCount(0);
     setConnectionStatus('connecting');
     setImageError(false);
-    setDetectionLabels([]);
     setFps(0);
     setLatency(0);
     
@@ -246,57 +216,6 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
   };
 
   const containerHeight = fullSize ? "h-96" : "h-64";
-
-  // --- ADMIN: DETECTION ---
-  const startDetectionPolling = () => {
-    if (!isAdmin) return;
-    if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
-    
-    setIsDetecting(true);
-    detectionIntervalRef.current = setInterval(() => {
-      if (receivedFrame) {
-        requestDetection(receivedFrame);
-      }
-    }, 3000);
-  };
-
-  const stopDetection = () => {
-    if (detectionIntervalRef.current) {
-      clearInterval(detectionIntervalRef.current);
-      detectionIntervalRef.current = null;
-    }
-    setIsDetecting(false);
-    setDetectionLabels([]);
-  };
-
-  const REKOGNITION_BACKEND_URL = 'https://disastermanagementrekognition.onrender.com/api/rekognition/detect';
-
-  const requestDetection = async (base64Frame: string) => {
-    if (!isAdmin) return;
-    
-    try {
-      const res = await fetch(REKOGNITION_BACKEND_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_base64: base64Frame })
-      });
-      
-      if (!res.ok) return;
-      
-      const json = await res.json();
-      setDetectionLabels(json.labels || []);
-      
-      const criticalDetection = json.labels?.some((l: RekognitionLabel) =>
-        l.Name === 'Person' || l.Name === 'Human' || l.Name === 'Emergency'
-      );
-      
-      if (criticalDetection) {
-        console.log('🚨 Critical detection: Person/Emergency detected!');
-      }
-    } catch (e) {
-      console.error('Detection request error:', e);
-    }
-  };
 
   // --- ADMIN: DELETE STREAM ---
   const deleteStream = async (streamId: string) => {
@@ -311,9 +230,11 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
     
     if (!window.confirm("Are you sure you want to delete this stream?")) return;
     
+    console.log('🗑️ Deleting stream:', streamId);
     const { error } = await supabase.from('drone_streams').delete().eq('id', streamId);
     
     if (!error) {
+      console.log('✅ Stream deleted successfully');
       setCurrentStream(null);
       toast({
         title: "Stream Deleted",
@@ -321,6 +242,7 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
       });
       navigate("/dashboard");
     } else {
+      console.error('❌ Stream deletion error:', error);
       toast({
         title: "Delete Failed",
         description: error.message || "Error deleting stream.",
@@ -363,22 +285,34 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
 
   return (
     <div className="space-y-4">
-      {/* Stream Selector */}
-      {activeStreams.length > 1 && (
-        <div className="flex space-x-2 overflow-x-auto pb-2">
-          {activeStreams.map((stream) => (
-            <Button
-              key={stream.id}
-              onClick={() => switchStream(stream)}
-              variant={currentStream?.id === stream.id ? "default" : "outline"}
-              className="flex-shrink-0"
-            >
-              <Camera className="h-4 w-4 mr-2" />
-              {stream.stream_name}
-            </Button>
-          ))}
-        </div>
-      )}
+      {/* Stream Selector + Past Streams Button */}
+      <div className="flex items-center justify-between gap-4">
+        {activeStreams.length > 1 && (
+          <div className="flex space-x-2 overflow-x-auto pb-2 flex-1">
+            {activeStreams.map((stream) => (
+              <Button
+                key={stream.id}
+                onClick={() => switchStream(stream)}
+                variant={currentStream?.id === stream.id ? "default" : "outline"}
+                className="flex-shrink-0"
+              >
+                <Camera className="h-4 w-4 mr-2" />
+                {stream.stream_name}
+              </Button>
+            ))}
+          </div>
+        )}
+        
+        {/* Past Streams Button */}
+        <Button 
+          onClick={() => navigate('/past-streams')} 
+          variant="outline"
+          className="flex-shrink-0"
+        >
+          <History className="h-4 w-4 mr-2" />
+          Past Streams
+        </Button>
+      </div>
 
       {/* Stream Info Card */}
       {currentStream && (
@@ -401,18 +335,12 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
                   </Badge>
                 )}
                 
-                {/* ADMIN ONLY BADGES */}
                 {isAdmin && (
                   <>
                     <Badge className="bg-purple-100 text-purple-700">
                       <Shield className="h-3 w-3 mr-1" />
                       Admin
                     </Badge>
-                    {isDetecting && (
-                      <Badge className="bg-green-500 text-white animate-pulse">
-                        Detection ON
-                      </Badge>
-                    )}
                     {latency > 0 && (
                       <Badge className="bg-gray-100 text-gray-700">
                         {latency}ms
@@ -432,7 +360,6 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
                   {currentStream.location}
                 </div>
                 
-                {/* ADMIN ONLY: DELETE BUTTON */}
                 {isAdmin && (
                   <Button
                     variant="destructive"
@@ -462,50 +389,13 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
               onError={() => setImageError(true)}
             />
 
-            {/* ADMIN ONLY: Detection Overlays */}
-            {isAdmin && detectionLabels.map((label, idx) => (
-              <div
-                key={`${label.Name}-${idx}`}
-                className="absolute z-20 pointer-events-none"
-                style={{
-                  left: label.Instances?.[0]?.BoundingBox?.Left
-                    ? `${label.Instances[0].BoundingBox.Left * 100}%`
-                    : '8px',
-                  top: label.Instances?.[0]?.BoundingBox?.Top
-                    ? `${label.Instances[0].BoundingBox.Top * 100}%`
-                    : `${32 + idx * 32}px`,
-                  width: label.Instances?.[0]?.BoundingBox?.Width
-                    ? `${label.Instances[0].BoundingBox.Width * 100}%`
-                    : 'auto',
-                  height: label.Instances?.[0]?.BoundingBox?.Height
-                    ? `${label.Instances[0].BoundingBox.Height * 100}%`
-                    : 'auto',
-                  border: label.Instances?.length ? '2px solid #ffb703' : 'none',
-                  background: label.Instances?.length ? 'rgba(255,183,3,0.1)' : 'rgba(0,0,0,0.7)',
-                  borderRadius: '6px',
-                  padding: '4px 8px',
-                }}
-              >
-                <span className="font-semibold text-xs text-white whitespace-nowrap">
-                  {label.Name} {label.Confidence && `${Math.round(label.Confidence)}%`}
-                </span>
-              </div>
-            ))}
-
-            {/* Status Overlays */}
             <div className="absolute top-4 left-4 flex gap-2 z-10">
               <Badge className="bg-red-500 text-white">
                 <span className="animate-pulse mr-1">●</span>
                 LIVE
               </Badge>
-              {isAdmin && isDetecting && (
-                <Badge className="bg-purple-500 text-white animate-pulse">
-                  Detecting...
-                </Badge>
-              )}
             </div>
 
-            {/* ADMIN ONLY: Frame Counter */}
             {isAdmin && (
               <div className="absolute bottom-4 right-4 flex gap-2 z-10">
                 <div className="bg-black/70 text-white px-3 py-1 rounded text-sm font-mono">
@@ -564,32 +454,6 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
           </CardContent>
         </Card>
       </div>
-
-      {/* ADMIN ONLY: Detection Results */}
-      {isAdmin && detectionLabels.length > 0 && (
-        <Card className="border-purple-100">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-purple-500" />
-              AI Detected Objects (Admin Only)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {detectionLabels.map((label, idx) => (
-                <Badge key={`badge-${label.Name}-${idx}`} className="bg-orange-200 text-orange-900 text-xs">
-                  {label.Name}
-                  {label.Confidence && (
-                    <span className="ml-1 font-mono text-orange-700">
-                      {Math.round(label.Confidence)}%
-                    </span>
-                  )}
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };
