@@ -10,6 +10,7 @@ import {
   Camera, Zap, Users, MapPin, Signal,
   Monitor, AlertTriangle, Loader2, Eye, History, Shield, Trash2, Wifi
 } from "lucide-react";
+import { API_ENDPOINTS } from '@/config/api';
 import { useDroneStreaming } from '@/hooks/useDroneStreaming';
 import type { DroneStream } from '@/types/streaming';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -268,7 +269,7 @@ export const RealtimeDroneStream = ({ fullSize = false }: RealtimeDroneStreamPro
     setDetectionLabels([]);
   };
 
-  const REKOGNITION_BACKEND_URL = "http://localhost:8001/api/rekognition/detect";
+  const REKOGNITION_BACKEND_URL = 'https://disastermanagementrekognition.onrender.com/api/rekognition/detect';
 
   const requestDetection = async (base64Frame: string) => {
     if (!isAdmin) return;
