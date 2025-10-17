@@ -12,6 +12,7 @@ import AIAssistant from "./pages/AIAssistant";
 import Admin from "./pages/Admin";
 import RescueTeam from "./pages/RescueTeam";
 import MobileStream from "./pages/MobileStream";
+import { PastStreams } from "./pages/PastStreams";
 import { NotFound } from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,7 +35,7 @@ const App = () => (
           
           {/* Mobile Device Streaming Route */}
           <Route path="/mobile-stream" element={<MobileStream />} />
-          
+          <Route path="/past-streams" element={<PastStreams />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

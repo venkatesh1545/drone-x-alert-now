@@ -27,7 +27,6 @@ export const useDroneStreaming = () => {
     };
   }, []);
 
-  // Heartbeat to keep viewer status alive
   useEffect(() => {
     if (!currentStream) {
       if (heartbeatIntervalRef.current) {
@@ -37,10 +36,8 @@ export const useDroneStreaming = () => {
       return;
     }
 
-    // Initial join
     joinStream(currentStream.id);
 
-    // Set up heartbeat interval - updates last_seen every 15 seconds
     heartbeatIntervalRef.current = setInterval(() => {
       if (currentStream) {
         joinStream(currentStream.id);
@@ -57,27 +54,61 @@ export const useDroneStreaming = () => {
 
   const checkUserRole = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      console.log('🔐 Checking user role...');
+      
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) {
+        console.error('❌ Error getting user:', userError);
+        return;
+      }
+      
+      if (!user) {
+        console.log('⚠️ No user logged in');
+        return;
+      }
 
-      const { data: roles } = await supabase
+      console.log('👤 Current user:', {
+        id: user.id,
+        email: user.email
+      });
+
+      const { data: roles, error: rolesError } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', user.id);
 
+      if (rolesError) {
+        console.error('❌ Error fetching roles:', rolesError);
+        return;
+      }
+
+      console.log('📋 User roles from database:', roles);
+
       const hasAdminRole = roles?.some(r => r.role === 'admin');
+      
+      console.log('✅ Admin check result:', hasAdminRole);
+      
       setIsAdmin(hasAdminRole || false);
+      
+      if (hasAdminRole) {
+        console.log('👮 USER IS ADMIN - Detection will be enabled');
+      } else {
+        console.log('👤 USER IS NOT ADMIN - Detection disabled');
+      }
     } catch (error) {
-      console.error('Error checking user role:', error);
+      console.error('❌ Exception checking user role:', error);
     }
   };
 
   const loadActiveStreams = async () => {
     try {
+      console.log('📡 Loading ONLY active live streams...');
+      
       const { data, error } = await supabase
         .from('drone_streams')
         .select('*')
-        .eq('is_active', true)
+        .eq('is_active', true) // ONLY active streams
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -89,13 +120,16 @@ export const useDroneStreaming = () => {
         viewer_count: stream.viewer_count || 0
       })) as DroneStream[];
       
+      console.log(`✅ Loaded ${typedStreams.length} active streams`);
+      
       setActiveStreams(typedStreams);
       
-      // Only set current stream if there isn't one already
-      // This prevents automatic switching between streams
       if (typedStreams && typedStreams.length > 0 && !currentStream) {
         console.log('📺 Setting initial stream:', typedStreams[0].stream_name);
         setCurrentStream(typedStreams[0]);
+      } else if (typedStreams.length === 0) {
+        console.log('⚠️ No active streams available');
+        setCurrentStream(null);
       }
     } catch (error) {
       console.error('Error loading streams:', error);
@@ -115,6 +149,8 @@ export const useDroneStreaming = () => {
           table: 'drone_streams',
         },
         (payload) => {
+          console.log('📡 Stream update received:', payload.eventType);
+          
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             const stream = {
               ...payload.new,
@@ -123,31 +159,39 @@ export const useDroneStreaming = () => {
               viewer_count: payload.new.viewer_count || 0
             } as DroneStream;
             
+            // Only add to active streams if is_active is true
             if (stream.is_active) {
+              console.log('➕ Adding/updating active stream:', stream.stream_name);
               setActiveStreams(prev => {
                 const filtered = prev.filter(s => s.id !== stream.id);
                 return [stream, ...filtered];
               });
               
-              // Update current stream data if it's the same stream
               if (currentStream?.id === stream.id) {
                 console.log('🔄 Updating current stream data');
                 setCurrentStream(stream);
               }
             } else {
+              // Stream became inactive - remove from active streams
+              console.log('➖ Removing inactive stream:', stream.stream_name);
               setActiveStreams(prev => prev.filter(s => s.id !== stream.id));
               
-              // Only clear current stream if it's being deactivated
               if (currentStream?.id === stream.id) {
-                console.log('🛑 Current stream deactivated');
+                console.log('🛑 Current stream ended - clearing');
                 setCurrentStream(null);
+                
+                toast({
+                  title: "Stream Ended",
+                  description: "The live stream has ended and is now in past streams.",
+                });
               }
             }
           } else if (payload.eventType === 'DELETE') {
+            console.log('🗑️ Stream deleted:', payload.old.id);
             setActiveStreams(prev => prev.filter(s => s.id !== payload.old.id));
             
             if (currentStream?.id === payload.old.id) {
-              console.log('🗑️ Current stream deleted');
+              console.log('🛑 Current stream deleted');
               setCurrentStream(null);
             }
           }
@@ -236,16 +280,23 @@ export const useDroneStreaming = () => {
     if (!isAdmin) return;
 
     try {
+      console.log('🛑 Stopping stream:', streamId);
+      
       const { error } = await supabase
         .from('drone_streams')
-        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .update({ 
+          is_active: false,
+          updated_at: new Date().toISOString() 
+        })
         .eq('id', streamId);
 
       if (error) throw error;
 
+      console.log('✅ Stream stopped and moved to past streams');
+
       toast({
         title: "Stream Stopped",
-        description: "Live stream has been deactivated",
+        description: "Live stream has been ended and moved to past streams",
       });
     } catch (error) {
       console.error('Error stopping stream:', error);
@@ -276,7 +327,6 @@ export const useDroneStreaming = () => {
       if (error) {
         console.error('❌ Error joining stream:', error);
       } else {
-        // Call RPC function to update viewer count
         try {
           const { data: viewerCount } = await supabase
             .rpc('get_stream_viewer_count', { p_stream_id: streamId });
@@ -285,7 +335,6 @@ export const useDroneStreaming = () => {
             console.log(`👥 Stream now has ${viewerCount} viewer(s)`);
           }
         } catch (rpcError) {
-          // Silently fail - viewer count will update via trigger
           console.log('Viewer count will update automatically');
         }
       }

@@ -3,28 +3,17 @@ export interface DroneStream {
   admin_id: string;
   stream_name: string;
   location: string;
-  latitude?: number;
-  longitude?: number;
+  latitude?: number | null;
+  longitude?: number | null;
   is_active: boolean;
   stream_quality: 'SD' | 'HD' | '4K';
   emergency_level: 'low' | 'medium' | 'high' | 'critical';
-  description?: string;
-  device_type?: 'mobile' | 'drone' | 'camera' | 'laptop';
-  connection_mode?: 'wifi' | 'bluetooth';
+  description?: string | null;
+  created_at: string;
+  updated_at: string;
   viewer_count: number;
-  created_at: string; // Changed from optional to required
-  updated_at: string; // Changed from optional to required
-}
-
-export interface StreamStartData {
-  stream_name: string;
-  location: string;
-  latitude?: number;
-  longitude?: number;
-  is_active: boolean;
-  stream_quality: 'SD' | 'HD' | '4K';
-  emergency_level: 'low' | 'medium' | 'high' | 'critical';
-  description?: string;
-  device_type?: 'mobile' | 'drone' | 'camera' | 'laptop';
-  connection_mode?: 'wifi' | 'bluetooth';
+  device_type?: string;
+  connection_mode?: string;
+  recording_url?: string | null; // NEW
+  is_recorded?: boolean;         // NEW
 }
