@@ -7,26 +7,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/components/ui/use-toast';
-import { Users, Plus, Edit, Trash2, Network, Phone, Mail, User, Save, List, Heart, Check, Clock, X } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { Users, Plus, Edit, Trash2, Network, Phone, Mail, User, Save, List, Heart, Check, Clock, X, MessageCircle, UserPlus, Camera, Search, Upload, Image } from 'lucide-react';
 import { EmergencyContactsGraph } from './EmergencyContactsGraph';
+import { ContactAvatar } from '@/components/ui/contact-avatar';
+import { Database } from '@/types/database';
 import EmergencyContactVerification from './EmergencyContactVerification';
-import GroupChatInbox from './GroupChatInbox';
+import { Inbox } from './Inbox';
 import EmergencyGroupChat from './EmergencyGroupChat';
+import { uploadPhoto, initializeStorageBucket } from '@/utils/storage';
+import ErrorBoundary from './ErrorBoundary';
 
-
-
-interface EmergencyContact {
-  id?: string;
-  name: string;
-  phone: string;
-  email?: string;
-  relationship?: string;
-  priority?: number;
-  verification_status?: 'pending' | 'verified' | 'failed';
-  verification_type?: 'email' | 'sms';
-  verified_at?: string;
-}
+type EmergencyContact = Database['public']['Tables']['emergency_contacts']['Row'] & {
+  profile?: {
+    display_name?: string;
+    avatar_url?: string;
+    gender?: 'male' | 'female' | 'other';
+    is_online?: boolean;
+    last_seen?: string;
+  };
+};
 
 interface EmergencyContactsProps {
   readOnly?: boolean;
@@ -34,11 +34,13 @@ interface EmergencyContactsProps {
 
 export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) => {
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
-  const [editingContact, setEditingContact] = useState<EmergencyContact | null>(null);
+  const [editingContact, setEditingContact] = useState<Partial<EmergencyContact> | null>(null);
   const [loading, setLoading] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
+    initializeStorageBucket();
     fetchContacts();
   }, []);
 
@@ -69,6 +71,57 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
     }
   };
 
+  const handlePhotoUpload = async (file: File): Promise<string | null> => {
+    try {
+      setUploadingPhoto(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      const photoUrl = await uploadPhoto(file, user.id);
+      return photoUrl;
+    } catch (error) {
+      console.error('Photo upload error:', error);
+      toast({
+        title: "Upload Error",
+        description: "Failed to upload photo. Please try again.",
+        variant: "destructive",
+      });
+      return null;
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const handlePhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !editingContact) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid File",
+        description: "Please select an image file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File Too Large",
+        description: "Please select an image under 5MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const photoUrl = await handlePhotoUpload(file);
+    if (photoUrl) {
+      setEditingContact({ ...editingContact, photo_url: photoUrl });
+    }
+  };
+
   const saveContact = async () => {
     if (!editingContact) return;
     
@@ -86,21 +139,32 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
             email: editingContact.email,
             relationship: editingContact.relationship,
             priority: editingContact.priority,
+            photo_url: editingContact.photo_url,
           })
           .eq('id', editingContact.id);
 
         if (error) throw error;
       } else {
-        // Create new contact
+        // Create new contact - ensure required fields are present
+        if (!editingContact.name || !editingContact.phone) {
+          toast({
+            title: "Missing Information",
+            description: "Name and phone are required.",
+            variant: "destructive",
+          });
+          return;
+        }
+
         const { error } = await supabase
           .from('emergency_contacts')
           .insert({
             user_id: user.id,
             name: editingContact.name,
             phone: editingContact.phone,
-            email: editingContact.email,
-            relationship: editingContact.relationship,
-            priority: editingContact.priority,
+            email: editingContact.email || '',
+            relationship: editingContact.relationship || '',
+            priority: editingContact.priority || 1,
+            photo_url: editingContact.photo_url,
           });
 
         if (error) throw error;
@@ -112,11 +176,12 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
         title: "Success",
         description: "Emergency contact saved successfully.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error saving contact:', error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to save contact.";
       toast({
         title: "Error",
-        description: error.message || "Failed to save contact.",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -160,6 +225,7 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
         email: '',
         relationship: '',
         priority: nextPriority,
+        photo_url: null,
       });
     }
   };
@@ -201,7 +267,14 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
         <CardContent>
           <div className="space-y-3">
             {contacts.map((contact) => (
-              <div key={contact.id} className="flex items-center justify-between p-3 border rounded-lg bg-card">
+              <div key={contact.id} className="flex items-center gap-3 p-3 border rounded-lg bg-card">
+                <ContactAvatar
+                  name={contact.name || 'Contact'}
+                  photoUrl={contact.photo_url}
+                  size={40}
+                  showOnlineStatus={contact.is_online}
+                  className="flex-shrink-0"
+                />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <h4 className="font-medium text-sm truncate">{contact.name}</h4>
@@ -288,72 +361,117 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="name">Name *</Label>
-                        <Input
-                          id="name"
-                          value={editingContact.name || ''}
-                          onChange={(e) => setEditingContact({ ...editingContact, name: e.target.value })}
-                          placeholder="Contact name"
-                        />
+                    <div className="space-y-6">
+                      {/* Photo Upload Section */}
+                      <div className="flex items-center gap-4">
+                        <div className="relative">
+                          <ContactAvatar
+                            name={editingContact.name || 'Contact'}
+                            photoUrl={editingContact.photo_url}
+                            size={64}
+                            showOnlineStatus={false}
+                          />
+                          {uploadingPhoto && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <Label htmlFor="photo">Contact Photo</Label>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Input
+                              id="photo"
+                              type="file"
+                              accept="image/*"
+                              onChange={handlePhotoChange}
+                              disabled={uploadingPhoto}
+                              className="file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                            />
+                            {editingContact.photo_url && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setEditingContact({ ...editingContact, photo_url: null })}
+                              >
+                                Remove
+                              </Button>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Choose a profile photo for this contact (max 5MB)
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <Label htmlFor="phone">Phone *</Label>
-                        <Input
-                          id="phone"
-                          value={editingContact.phone || ''}
-                          onChange={(e) => setEditingContact({ ...editingContact, phone: e.target.value })}
-                          placeholder="Phone number"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="email">Email</Label>
-                        <Input
-                          id="email"
-                          type="email"
-                          value={editingContact.email || ''}
-                          onChange={(e) => setEditingContact({ ...editingContact, email: e.target.value })}
-                          placeholder="Email address"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="relationship">Relationship</Label>
-                        <Select
-                          value={editingContact.relationship || ''}
-                          onValueChange={(value) => setEditingContact({ ...editingContact, relationship: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select relationship" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="parent">Parent</SelectItem>
-                            <SelectItem value="spouse">Spouse</SelectItem>
-                            <SelectItem value="sibling">Sibling</SelectItem>
-                            <SelectItem value="child">Child</SelectItem>
-                            <SelectItem value="friend">Friend</SelectItem>
-                            <SelectItem value="colleague">Colleague</SelectItem>
-                            <SelectItem value="neighbor">Neighbor</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="priority">Priority</Label>
-                        <Select
-                          value={editingContact.priority?.toString() || ''}
-                          onValueChange={(value) => setEditingContact({ ...editingContact, priority: parseInt(value) })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select priority" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="1">1 - Highest</SelectItem>
-                            <SelectItem value="2">2 - High</SelectItem>
-                            <SelectItem value="3">3 - Medium</SelectItem>
-                            <SelectItem value="4">4 - Low</SelectItem>
-                          </SelectContent>
-                        </Select>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="name">Name *</Label>
+                          <Input
+                            id="name"
+                            value={editingContact.name || ''}
+                            onChange={(e) => setEditingContact({ ...editingContact, name: e.target.value })}
+                            placeholder="Contact name"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="phone">Phone *</Label>
+                          <Input
+                            id="phone"
+                            value={editingContact.phone || ''}
+                            onChange={(e) => setEditingContact({ ...editingContact, phone: e.target.value })}
+                            placeholder="Phone number"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="email">Email</Label>
+                          <Input
+                            id="email"
+                            type="email"
+                            value={editingContact.email || ''}
+                            onChange={(e) => setEditingContact({ ...editingContact, email: e.target.value })}
+                            placeholder="Email address"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="relationship">Relationship</Label>
+                          <Select
+                            value={editingContact.relationship || ''}
+                            onValueChange={(value) => setEditingContact({ ...editingContact, relationship: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select relationship" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="parent">Parent</SelectItem>
+                              <SelectItem value="spouse">Spouse</SelectItem>
+                              <SelectItem value="sibling">Sibling</SelectItem>
+                              <SelectItem value="child">Child</SelectItem>
+                              <SelectItem value="friend">Friend</SelectItem>
+                              <SelectItem value="colleague">Colleague</SelectItem>
+                              <SelectItem value="neighbor">Neighbor</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="priority">Priority</Label>
+                          <Select
+                            value={editingContact.priority?.toString() || ''}
+                            onValueChange={(value) => setEditingContact({ ...editingContact, priority: parseInt(value) })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select priority" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="1">1 - Highest</SelectItem>
+                              <SelectItem value="2">2 - High</SelectItem>
+                              <SelectItem value="3">3 - Medium</SelectItem>
+                              <SelectItem value="4">4 - Low</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                     </div>
                     <div className="flex gap-2 mt-4">
@@ -373,65 +491,76 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
 
               <div className="space-y-4">
                 {contacts.map((contact) => (
-                  <div key={contact.id} className="flex items-start justify-between p-4 border rounded-lg bg-card">
-                    {/* Content Section - Fixed width and spacing */}
-                    <div className="flex-1 min-w-0 mr-4">
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <h4 className="font-medium truncate">{contact.name}</h4>
-                        {contact.verification_status === 'verified' && (
-                          <Badge variant="default" className="bg-green-100 text-green-800 text-xs whitespace-nowrap">
-                            <Check className="w-3 h-3 mr-1" />
-                            Verified
-                          </Badge>
-                        )}
-                        {contact.verification_status === 'pending' && (
-                          <Badge variant="secondary" className="text-xs whitespace-nowrap">
-                            <Clock className="w-3 h-3 mr-1" />
-                            Pending
-                          </Badge>
-                        )}
-                        {(!contact.verification_status || contact.verification_status === 'failed') && (
-                          <Badge variant="outline" className="text-xs whitespace-nowrap">
-                            <X className="w-3 h-3 mr-1" />
-                            Unverified
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2 flex-wrap">
-                        <span className="flex items-center gap-1">
-                          <Phone className="w-3 h-3 flex-shrink-0" />
-                          <span className="truncate">{contact.phone}</span>
-                        </span>
-                        {contact.email && (
-                          <span className="flex items-center gap-1">
-                            <Mail className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate">{contact.email}</span>
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {contact.relationship && (
-                          <Badge variant="outline" className="text-xs whitespace-nowrap">
-                            {contact.relationship}
-                          </Badge>
-                        )}
-                        {contact.priority && (
-                          <Badge 
-                            variant="secondary" 
-                            className={`text-xs whitespace-nowrap ${getPriorityColor(contact.priority)}`}
-                          >
-                            {getPriorityLabel(contact.priority)}
-                          </Badge>
-                        )}
-                      </div>
-                      {contact.verified_at && (
-                        <div className="text-xs text-green-600 mt-1">
-                          Verified on {new Date(contact.verified_at).toLocaleDateString()}
+                  <div key={contact.id} className="flex items-start justify-between p-4 border rounded-lg bg-card hover:bg-accent/5 transition-colors">
+                    <div className="flex items-start gap-3 flex-1 min-w-0 mr-4">
+                      {/* Contact Photo */}
+                      <ContactAvatar
+                        name={contact.name || 'Contact'}
+                        photoUrl={contact.photo_url}
+                        size={48}
+                        showOnlineStatus={contact.is_online}
+                        className="flex-shrink-0"
+                      />
+                      
+                      {/* Contact Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <h4 className="font-medium truncate">{contact.name}</h4>
+                          {contact.verification_status === 'verified' && (
+                            <Badge variant="default" className="bg-green-100 text-green-800 text-xs whitespace-nowrap">
+                              <Check className="w-3 h-3 mr-1" />
+                              Verified
+                            </Badge>
+                          )}
+                          {contact.verification_status === 'pending' && (
+                            <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                              <Clock className="w-3 h-3 mr-1" />
+                              Pending
+                            </Badge>
+                          )}
+                          {(!contact.verification_status || contact.verification_status === 'failed') && (
+                            <Badge variant="outline" className="text-xs whitespace-nowrap">
+                              <X className="w-3 h-3 mr-1" />
+                              Unverified
+                            </Badge>
+                          )}
                         </div>
-                      )}
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2 flex-wrap">
+                          <span className="flex items-center gap-1">
+                            <Phone className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{contact.phone}</span>
+                          </span>
+                          {contact.email && (
+                            <span className="flex items-center gap-1">
+                              <Mail className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate">{contact.email}</span>
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {contact.relationship && (
+                            <Badge variant="outline" className="text-xs whitespace-nowrap">
+                              {contact.relationship}
+                            </Badge>
+                          )}
+                          {contact.priority && (
+                            <Badge 
+                              variant="secondary" 
+                              className={`text-xs whitespace-nowrap ${getPriorityColor(contact.priority)}`}
+                            >
+                              {getPriorityLabel(contact.priority)}
+                            </Badge>
+                          )}
+                        </div>
+                        {contact.verified_at && (
+                          <div className="text-xs text-green-600 mt-1">
+                            Verified on {new Date(contact.verified_at).toLocaleDateString()}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     
-                    {/* Action Buttons - Fixed alignment */}
+                    {/* Action Buttons */}
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <Button
                         size="sm"
@@ -444,7 +573,7 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => deleteContact(contact.id!)}
+                        onClick={() => deleteContact(contact.id)}
                         className="text-destructive hover:text-destructive h-9 w-9 p-0"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -467,15 +596,16 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
 
         <TabsContent value="verification">
           <EmergencyContactVerification
-            contacts={contacts as any}
+            contacts={contacts}
             onVerificationUpdate={fetchContacts}
           />
         </TabsContent>
 
         <TabsContent value="chat">
-          <GroupChatInbox />
+          <ErrorBoundary>
+            <Inbox />
+          </ErrorBoundary>
         </TabsContent>
-
 
         <TabsContent value="graph">
           <Card>
@@ -489,7 +619,7 @@ export const EmergencyContacts = ({ readOnly = false }: EmergencyContactsProps) 
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <EmergencyContactsGraph contacts={contacts as any} />
+              <EmergencyContactsGraph contacts={contacts} />
             </CardContent>
           </Card>
         </TabsContent>

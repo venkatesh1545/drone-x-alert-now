@@ -643,7 +643,18 @@ export const LiveMap = ({ fullSize = false }: LiveMapProps) => {
   ];
 
   // AI-powered function to calculate safety score with priority weighting
-  const calculateAISafetyScore = (place: any, userLoc: { lat: number; lng: number }, basePriority: number): number => {
+  // Add this interface near the top of the file (after SafePlace interface)
+  interface PlaceData {
+    distance: number;
+    rating?: number;
+    openingHours?: {
+      open_now?: boolean;
+    };
+    capacity: number;
+  }
+
+  // AI-powered function to calculate safety score with priority weighting
+  const calculateAISafetyScore = (place: PlaceData, userLoc: { lat: number; lng: number }, basePriority: number): number => {
     let score = basePriority; // Start with base priority score
     
     // Distance factor (closer is better for emergency access)
@@ -680,6 +691,7 @@ export const LiveMap = ({ fullSize = false }: LiveMapProps) => {
     
     return Math.max(0, Math.min(100, score));
   };
+
 
   // Calculate distance between two coordinates
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {

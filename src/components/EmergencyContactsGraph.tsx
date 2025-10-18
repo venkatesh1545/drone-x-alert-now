@@ -11,6 +11,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { Badge } from "@/components/ui/badge";
 import { Phone, Mail } from "lucide-react";
+import { ContactAvatar } from "@/components/ui/contact-avatar";
 
 interface EmergencyContact {
   id?: string;
@@ -19,6 +20,9 @@ interface EmergencyContact {
   email?: string;
   relationship?: string;
   priority: number;
+  photo_url?: string;
+  gender?: 'male' | 'female' | 'other';
+  is_online?: boolean;
 }
 
 interface EmergencyContactsGraphProps {
@@ -50,13 +54,23 @@ const ContactNode = ({ data }: { data: EmergencyContact }) => {
 
   return (
     <div 
-      className="px-4 py-3 shadow-lg rounded-lg bg-white border-2 min-w-[180px]"
+      className="px-4 py-3 shadow-lg rounded-lg bg-white border-2 min-w-[200px]"
       style={{ borderColor: getPriorityColor(data.priority) }}
     >
       <Handle type="target" position={Position.Top} className="w-3 h-3" />
       
       <div className="text-center">
-        <div className="font-semibold text-sm text-gray-900 mb-1">{data.name}</div>
+        <div className="flex flex-col items-center mb-2">
+          <ContactAvatar
+            name={data.name}
+            photoUrl={data.photo_url}
+            size={48}
+            gender={data.gender}
+            showOnlineStatus={data.is_online}
+            className="mb-2"
+          />
+          <div className="font-semibold text-sm text-gray-900">{data.name}</div>
+        </div>
         <Badge 
           className="text-xs mb-2"
           style={{ 
@@ -108,7 +122,7 @@ export const EmergencyContactsGraph = ({ contacts }: EmergencyContactsGraphProps
       id: 'user',
       type: 'default',
       position: { x: 250, y: 150 },
-      data: { label: 'You' },
+      data: { label: 'You' } as Record<string, unknown>,
       style: { 
         background: '#0ea5e9',
         color: 'white',
@@ -132,7 +146,7 @@ export const EmergencyContactsGraph = ({ contacts }: EmergencyContactsGraphProps
         id: contact.id || `contact-${index}`,
         type: 'contact',
         position: { x: x - 90, y: y - 40 }, // Center the node
-        data: contact as any,
+        data: contact as unknown as Record<string, unknown>,
       };
     });
 

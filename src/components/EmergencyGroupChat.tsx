@@ -10,8 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/components/ui/use-toast';
 import { 
   MessageCircle, Send, Paperclip, MapPin, Users, X, Clock, FileText, 
-  Download, Wifi, WifiOff, Mic, Camera, Square, Play, Pause 
+  Download, Wifi, WifiOff, Mic, Camera, Square, Play, Pause, Settings, UserPlus, LogOut, Pencil, Check, CheckCheck 
 } from 'lucide-react';
+import {ContactAvatar} from '@/components/ui/contact-avatar';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 
 interface GroupChat {
   id: string;
@@ -26,6 +30,9 @@ interface GroupMember {
   user_id?: string | null;
   display_name: string;
   is_active: boolean;
+  avatar_url?: string;
+  gender?: 'male' | 'female' | 'other';
+  is_online?: boolean;
 }
 
 interface ChatMessage {
@@ -39,6 +46,8 @@ interface ChatMessage {
   file_name?: string | null;
   file_size?: number | null;
   file_type?: string | null;
+  delivery_status?: 'sent' | 'delivered' | 'read' | null;
+  retry_count?: number | null;
   created_at: string;
   updated_at?: string;
 }
@@ -58,6 +67,9 @@ const EmergencyGroupChat: React.FC<EmergencyGroupChatProps> = ({ chatId }) => {
   const [locationDuration, setLocationDuration] = useState('1');
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' && window.navigator.onLine);
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [newMemberEmail, setNewMemberEmail] = useState('');
   
   // Media recording states
   const [isRecordingVideo, setIsRecordingVideo] = useState(false);
@@ -83,6 +95,25 @@ const EmergencyGroupChat: React.FC<EmergencyGroupChatProps> = ({ chatId }) => {
   }, []);
 
   useEffect(() => { loadChat(); }, [chatId]);
+  
+  // Realtime updates for this group chat
+  useEffect(() => {
+    if (!chatId) return;
+    const channel = supabase.channel('gc-'.concat(String(chatId)))
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'group_chat_messages',
+        filter: `group_id=eq.${chatId}`,
+      }, () => {
+        loadChat();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatId]);
+  
   useEffect(() => { scrollToBottom(); }, [messages]);
 
   const scrollToBottom = () => {
@@ -94,6 +125,7 @@ const EmergencyGroupChat: React.FC<EmergencyGroupChatProps> = ({ chatId }) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      setCurrentUserId(user.id);
 
       // Load group chat
       const { data: chat } = await supabase.from('group_chats').select('*').eq('id', chatId).single();
@@ -211,7 +243,7 @@ const EmergencyGroupChat: React.FC<EmergencyGroupChatProps> = ({ chatId }) => {
         else msgType = 'file';
         
         const fileExt = selectedFile.name.split('.').pop();
-        const filePath = `${user.id}/${Date.now()}.${fileExt}`;
+        const filePath = `${user?.id}/${Date.now()}.${fileExt}`;
         const { data: uploadData, error: uploadError } = await supabase.storage.from('chat-files').upload(filePath, selectedFile);
         
         if (!uploadError) {
@@ -221,24 +253,35 @@ const EmergencyGroupChat: React.FC<EmergencyGroupChatProps> = ({ chatId }) => {
       }
       
       const messageData = {
-        group_id: groupChat.id, sender_id: user.id, sender_name: senderName, message_type: selectedFile ? msgType : 'text',
+        group_id: groupChat.id, 
+        sender_id: user?.id, 
+        sender_name: senderName, 
+        message_type: selectedFile ? msgType : 'text',
         content: selectedFile
           ? (msgType === 'audio' ? 'Sent audio message'
             : msgType === 'video' ? 'Sent video message'
             : msgType === 'image' ? 'Sent photo'
             : `Shared file: ${selectedFile.name}`)
           : newMessage.trim(),
-        file_url: fileUrl, file_name: fileName, file_size: fileSize, file_type: fileType, delivery_status: 'sent', retry_count: 0
+        file_url: fileUrl, 
+        file_name: fileName, 
+        file_size: fileSize, 
+        file_type: fileType, 
+        delivery_status: 'sent' as const, 
+        retry_count: 0
       };
       
       await supabase.from('group_chat_messages').insert([messageData]);
-      setNewMessage(''); setSelectedFile(null);
+      setNewMessage(''); 
+      setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       loadChat();
       toast({ title: "✅ Message Sent", description: selectedFile ? "Media shared successfully" : "Message delivered" });
     } catch (error) {
       toast({ title: "❌ Failed to Send", description: "Message failed to send. Check your connection.", variant: "destructive" });
-    } finally { setSendingMessage(false); }
+    } finally { 
+      setSendingMessage(false); 
+    }
   };
 
   if (isLoading) {
@@ -281,6 +324,28 @@ const EmergencyGroupChat: React.FC<EmergencyGroupChatProps> = ({ chatId }) => {
             <Badge variant={isOnline ? "default" : "destructive"} className="text-xs">
               {isOnline ? "🟢 Online" : "🔴 Offline"}
             </Badge>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="ml-2"><Settings className="h-4 w-4"/></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Group Settings</DropdownMenuLabel>
+                <DropdownMenuItem onClick={async () => {
+                  const name = prompt('Rename group', groupChat.name || '');
+                  if (!name) return;
+                  await supabase.from('group_chats').update({ name }).eq('id', groupChat.id);
+                  loadChat();
+                }}><Pencil className="h-4 w-4 mr-2"/>Rename</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowAddMember(true)}><UserPlus className="h-4 w-4 mr-2"/>Add member</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={async () => {
+                  const { data: { user } } = await supabase.auth.getUser();
+                  if (!user) return;
+                  await supabase.from('group_chat_members').update({ is_active: false }).eq('group_id', groupChat.id).eq('user_id', user.id);
+                  toast({ title: 'Left group', description: 'You have left the group.' });
+                }} className="text-red-600"><LogOut className="h-4 w-4 mr-2"/>Leave group</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </CardTitle>
         <CardDescription>{groupChat.description}</CardDescription>
@@ -331,51 +396,78 @@ const EmergencyGroupChat: React.FC<EmergencyGroupChatProps> = ({ chatId }) => {
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto space-y-4 mb-4 p-4 border rounded-lg bg-gradient-to-b from-gray-50 to-white">
-            {messages.map((msg) => (
-              <div key={msg.id} className="flex flex-col space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-muted-foreground">{msg.sender_name}</span>
-                  <span className="text-xs text-muted-foreground">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</span>
+            {messages.map((msg) => {
+              const member = members.find(m => m.user_id === msg.sender_id);
+              return (
+                <div key={msg.id} className="flex space-x-3">
+                  <ContactAvatar
+                    name={msg.sender_name}
+                    photoUrl={member?.avatar_url}
+                    size={40}
+                    gender={member?.gender}
+                    showOnlineStatus={member?.is_online}
+                    className="flex-shrink-0 mt-1"
+                  />
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900">{msg.sender_name}</span>
+                      <span className="text-xs text-muted-foreground">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</span>
+                    </div>
+                    {msg.message_type === 'text' && (
+                      <div className="bg-white border rounded-xl p-3 max-w-md shadow-sm">
+                        {msg.content}
+                        <div className="text-[10px] opacity-70 text-right mt-1 flex items-center justify-end">
+                          {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                          {msg.sender_id === currentUserId && (msg.delivery_status === 'read' ? <CheckCheck className="inline h-3 w-3 ml-1"/> : <Check className="inline h-3 w-3 ml-1"/>)}
+                        </div>
+                      </div>
+                    )}
+                    {msg.message_type === 'audio' && msg.file_url && (
+                      <div className="bg-white border rounded-xl p-3 max-w-md shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Mic className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                          <span className="text-sm font-medium">Audio Message</span>
+                        </div>
+                        <audio controls src={msg.file_url} className="w-full" />
+                        <div className="text-[10px] opacity-70 text-right mt-1 flex items-center justify-end">
+                          {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                          {msg.sender_id === currentUserId && (msg.delivery_status === 'read' ? <CheckCheck className="inline h-3 w-3 ml-1"/> : <Check className="inline h-3 w-3 ml-1"/>)}
+                        </div>
+                      </div>
+                    )}
+                    {msg.message_type === 'video' && msg.file_url && (
+                      <div className="bg-white border rounded-xl p-3 max-w-md shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Camera className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                          <span className="text-sm font-medium">Video Message</span>
+                        </div>
+                        <video controls src={msg.file_url} className="w-full max-w-xs rounded" />
+                      </div>
+                    )}
+                    {msg.message_type === 'image' && msg.file_url && (
+                      <img src={msg.file_url} alt="shared" className="max-w-md rounded border" />
+                    )}
+                    {msg.message_type === 'file' && msg.file_url && (
+                      <div className="bg-white border rounded-xl p-3 max-w-md shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                          <FileText className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                          <span className="text-sm font-medium truncate">{msg.file_name}</span>
+                        </div>
+                        <Button size="sm" variant="outline" className="w-full" asChild>
+                          <a href={msg.file_url} target="_blank" rel="noopener noreferrer">
+                            <Download className="h-3 w-3 mr-1" />Download
+                          </a>
+                        </Button>
+                        <div className="text-[10px] opacity-70 text-right mt-1 flex items-center justify-end">
+                          {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                          {msg.sender_id === currentUserId && (msg.delivery_status === 'read' ? <CheckCheck className="inline h-3 w-3 ml-1"/> : <Check className="inline h-3 w-3 ml-1"/>)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {msg.message_type === 'text' && (
-                  <div className="bg-primary text-primary-foreground rounded-xl p-3 max-w-xs self-start shadow-sm">{msg.content}</div>
-                )}
-                {msg.message_type === 'audio' && msg.file_url && (
-                  <div className="bg-secondary rounded-xl p-3 max-w-xs border shadow-sm">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Mic className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                      <span className="text-sm font-medium">Audio Message</span>
-                    </div>
-                    <audio controls src={msg.file_url} className="w-full" />
-                  </div>
-                )}
-                {msg.message_type === 'video' && msg.file_url && (
-                  <div className="bg-secondary rounded-xl p-3 max-w-xs border shadow-sm">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Camera className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                      <span className="text-sm font-medium">Video Message</span>
-                    </div>
-                    <video controls src={msg.file_url} className="w-full max-w-xs rounded" />
-                  </div>
-                )}
-                {msg.message_type === 'image' && msg.file_url && (
-                  <img src={msg.file_url} alt="shared" className="max-w-xs rounded my-2" />
-                )}
-                {msg.message_type === 'file' && msg.file_url && (
-                  <div className="bg-secondary rounded-xl p-3 max-w-xs border shadow-sm">
-                    <div className="flex items-center gap-2 mb-2">
-                      <FileText className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                      <span className="text-sm font-medium truncate">{msg.file_name}</span>
-                    </div>
-                    <Button size="sm" variant="outline" className="w-full" asChild>
-                      <a href={msg.file_url} target="_blank" rel="noopener noreferrer">
-                        <Download className="h-3 w-3 mr-1" />Download
-                      </a>
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
             <div ref={messagesEndRef} />
           </div>
         )}

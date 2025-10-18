@@ -1,15 +1,19 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, Navigation, ExternalLink } from 'lucide-react';
+import { MapPin, Navigation, ExternalLink, Map, Route } from 'lucide-react';
 import { SafePlace } from '@/services/safePlacesService';
+import { SafePlacesMap } from './SafePlacesMap';
+import { useState } from 'react';
 
 interface SafePlacesListProps {
   places: SafePlace[];
   userLocation?: { lat: number; lng: number };
+  showMapByDefault?: boolean;
 }
 
-export const SafePlacesList = ({ places, userLocation }: SafePlacesListProps) => {
+export const SafePlacesList = ({ places, userLocation, showMapByDefault = false }: SafePlacesListProps) => {
+  const [showMap, setShowMap] = useState(showMapByDefault);
   const openInGoogleMaps = (place: SafePlace) => {
     const url = `https://www.google.com/maps/dir/${userLocation?.lat},${userLocation?.lng}/${place.location.lat},${place.location.lng}`;
     window.open(url, '_blank');
@@ -41,15 +45,37 @@ export const SafePlacesList = ({ places, userLocation }: SafePlacesListProps) =>
   if (places.length === 0) return null;
 
   return (
-    <Card className="my-4 border-sky-200 shadow-md">
-      <CardHeader className="bg-sky-50">
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <MapPin className="h-5 w-5 text-sky-500" />
-          Nearby Safe Locations
-        </CardTitle>
-      </CardHeader>
+    <div className="space-y-4">
+      {/* Interactive Map */}
+      {showMap && userLocation && (
+        <SafePlacesMap 
+          places={places} 
+          userLocation={userLocation}
+          onPlaceSelect={(place) => console.log('Selected place:', place)}
+        />
+      )}
+      
+      {/* List View */}
+      <Card className="border-sky-200 shadow-md">
+        <CardHeader className="bg-sky-50">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <MapPin className="h-5 w-5 text-sky-500" />
+              Nearby Safe Locations ({places.length} found)
+            </CardTitle>
+            <Button
+              variant={showMap ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowMap(!showMap)}
+              className="flex items-center gap-2"
+            >
+              <Map className="w-4 h-4" />
+              {showMap ? 'Hide Map' : 'Show Map'}
+            </Button>
+          </div>
+        </CardHeader>
       <CardContent className="space-y-3 pt-4">
-        {places.map((place, index) => (
+        {places.slice(0, 6).map((place, index) => (
           <div 
             key={index} 
             className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 hover:shadow-sm transition-all"
@@ -80,21 +106,48 @@ export const SafePlacesList = ({ places, userLocation }: SafePlacesListProps) =>
                 )}
               </div>
               
-              {userLocation && (
+              {userLocation ? (
+                <Button 
+                  size="sm" 
+                  variant="default"
+                  onClick={() => openInGoogleMaps(place)}
+                  className="bg-sky-500 hover:bg-sky-600 text-white"
+                >
+                  <Navigation className="h-4 w-4 mr-2" />
+                  Navigate
+                </Button>
+              ) : (
                 <Button 
                   size="sm" 
                   variant="outline"
-                  onClick={() => openInGoogleMaps(place)}
-                  className="text-sky-600 border-sky-300 hover:bg-sky-50 hover:border-sky-400"
+                  onClick={() => {
+                    alert('Location access needed for navigation. Please enable location services.');
+                  }}
+                  className="bg-gray-200 text-gray-500"
                 >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Get Directions
+                  <Navigation className="h-4 w-4 mr-2" />
+                  Need Location
                 </Button>
               )}
             </div>
           </div>
         ))}
+        
+        {places.length > 6 && (
+          <div className="mt-4 p-3 bg-sky-50 rounded-lg text-center">
+            <p className="text-sm text-sky-700 mb-2">
+              Showing top 6 results. {userLocation ? 'Use the interactive map above to see all locations.' : `${places.length - 6} more locations available.`}
+            </p>
+            {!showMap && userLocation && (
+              <Button size="sm" variant="outline" onClick={() => setShowMap(true)}>
+                <Map className="w-4 h-4 mr-2" />
+                View All on Map
+              </Button>
+            )}
+          </div>
+        )}
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 };

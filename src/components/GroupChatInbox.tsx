@@ -7,9 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Plus, MessageCircle, Users, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
 
 // Helper function to avoid type inference issues
+interface Profile {
+  user_id: string;
+}
+
 async function findUserIdByEmail(email: string): Promise<string | null> {
   try {
-    const result = await (supabase as any)
+    const result = await supabase
       .from('profiles')
       .select('user_id')
       .eq('email', email)
@@ -20,8 +24,15 @@ async function findUserIdByEmail(email: string): Promise<string | null> {
   }
 }
 
+interface Group {
+  id: string;
+  name: string;
+  description?: string;
+  created_at: string;
+}
+
 const GroupChatInbox = () => {
-  const [groups, setGroups] = useState<any[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true); // Collapsible sidebar state
@@ -67,7 +78,14 @@ const GroupChatInbox = () => {
           if (createError) throw createError;
 
           // Add verified contacts as members
-          const membersToAdd: any[] = [];
+          interface MemberToAdd {
+            group_id: string;
+            user_id: string;
+            display_name: string;
+            is_active: boolean;
+          }
+          
+          const membersToAdd: MemberToAdd[] = [];
           for (const contact of verifiedContacts) {
             const userId = await findUserIdByEmail(contact.email);
             if (userId) {
