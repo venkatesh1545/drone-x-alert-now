@@ -414,6 +414,7 @@ const AIAssistant = () => {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number; } | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [lastAIResponse, setLastAIResponse] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   
@@ -443,6 +444,12 @@ const AIAssistant = () => {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    
+    // Update last AI response for TTS
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage && lastMessage.message_type === 'assistant') {
+      setLastAIResponse(lastMessage.content);
+    }
   }, [messages]);
 
   const emergencyCategories = [
@@ -639,6 +646,7 @@ const AIAssistant = () => {
             <VoiceAssistant 
               onTranscript={handleVoiceTranscript}
               isProcessing={loading}
+              lastResponse={lastAIResponse}
             />
           </TabsContent>
 

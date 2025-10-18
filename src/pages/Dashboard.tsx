@@ -56,6 +56,43 @@ const Dashboard = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
+  // Global presence: track user online anywhere in app
+  // Global presence: track user online anywhere in app
+  useEffect(() => {
+    let presenceHeartbeat: number | undefined;
+    if (!user) return;
+    const channel = supabase.channel('presence-app', { config: { presence: { key: user.id } } });
+
+    channel.on('presence', { event: 'sync' }, () => {
+      // no-op: other components can subscribe to this same channel to read state
+    });
+
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        try { 
+          await channel.track({ at: Date.now() }); 
+        } catch (error) {
+          // Silently ignore presence tracking errors
+          console.debug('Presence tracking error:', error);
+        }
+        presenceHeartbeat = window.setInterval(() => {
+          try { 
+            channel.track({ at: Date.now() }); 
+          } catch (error) {
+            // Silently ignore presence heartbeat errors
+            console.debug('Presence heartbeat error:', error);
+          }
+        }, 20000);
+      }
+    });
+
+    return () => {
+      if (presenceHeartbeat) window.clearInterval(presenceHeartbeat);
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
+
   const checkUserRole = async (userId: string) => {
     try {
       const { data: roles } = await supabase
